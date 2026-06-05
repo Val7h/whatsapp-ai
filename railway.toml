@@ -1,0 +1,49 @@
+# Railway Infrastructure Configuration
+# Este arquivo contém toda a configuração do seu projeto
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node dist/index.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 5
+
+[[services]]
+name = "whatsapp-ai"
+image = "node:20"
+cmd = ["npm", "start"]
+port = 3000
+
+# Environment Variables
+[env]
+NODE_ENV = "production"
+LOG_LEVEL = "info"
+CLAUDE_MODEL = "claude-sonnet-4-20250514"
+MAX_HISTORY_TURNS = "20"
+CLINIC_PHONE = "(83) 9999-9999"
+WEBHOOK_SECRET = "meu-segredo-teste"
+PORT = "3000"
+
+# PostgreSQL Service
+[[services]]
+name = "postgres"
+type = "postgres"
+version = "16"
+
+# Redis Service
+[[services]]
+name = "redis"
+type = "redis"
+version = "latest"
+
+# Database Configuration
+[postgres]
+user = "postgres"
+password = "generated"
+database = "whatsapp_ai"
+
+# Environment connections
+[env_from_services]
+DATABASE_URL = "postgres://connection_string"
+REDIS_URL = "redis://connection_string"
