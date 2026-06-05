@@ -10,6 +10,8 @@ import preConsultaRouter from './pre-consulta/routes.js';
 // Inicializa banco SQLite (efeito colateral do import)
 import './db/sqlite.js';
 
+// Build timestamp: 2026-06-05 23:45 — Production Redis fallback enabled
+
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
