@@ -1,0 +1,118 @@
+╔════════════════════════════════════════════════════════════════════════╗
+║              🚂 EXECUTE O SCRIPT PARA CRIAR RAILWAY                    ║
+║                                                                        ║
+║                    (Tudo automático a partir daqui!)                   ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+┌─ PASSO 1: Abra Terminal/PowerShell ────────────────────────────────────┐
+│                                                                       │
+│  Windows:                                                             │
+│    Clique na barra de pesquisa                                       │
+│    Digite: PowerShell                                                │
+│    Clique em "Windows PowerShell"                                    │
+│                                                                       │
+│  Ou:                                                                 │
+│    Clique em Terminal (se tiver no Windows 11)                      │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ PASSO 2: Vá para a pasta do projeto ──────────────────────────────────┐
+│                                                                       │
+│  Execute este comando:                                               │
+│                                                                       │
+│  cd "C:\Users\Admin\OneDrive\Documents\whatsapp-ai"                  │
+│                                                                       │
+│  Depois clique Enter                                                 │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ PASSO 3: Execute o script ────────────────────────────────────────────┐
+│                                                                       │
+│  Execute este comando:                                               │
+│                                                                       │
+│  bash CREATE-RAILWAY.sh                                              │
+│                                                                       │
+│  Depois clique Enter                                                 │
+│                                                                       │
+│  ⏳ Aguarde...                                                         │
+│                                                                       │
+│  Uma aba do navegador vai abrir pedindo para fazer login no Railway  │
+│                                                                       │
+│  Clique em: [Authorize]                                              │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ PASSO 4: O script vai fazer tudo automaticamente ──────────────────────┐
+│                                                                       │
+│  Ele vai:                                                             │
+│                                                                       │
+│  ✅ Criar projeto no Railway                                         │
+│  ✅ Conectar ao repositório GitHub (whatsapp-ai)                    │
+│  ✅ Adicionar PostgreSQL                                             │
+│  ✅ Adicionar Redis                                                  │
+│  ✅ Configurar variáveis de ambiente                                 │
+│  ✅ Fazer deploy                                                     │
+│                                                                       │
+│  Tempo: 5-10 minutos (tudo automático)                               │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ PASSO 5: IMPORTANTE - Adicione ANTHROPIC_API_KEY ─────────────────────┐
+│                                                                       │
+│  Quando o script perguntar, execute:                                 │
+│                                                                       │
+│  railway variables set ANTHROPIC_API_KEY=sk-ant-api03-seu-token      │
+│                                                                       │
+│  (substitua seu-token pelo seu token real)                          │
+│                                                                       │
+│  Depois Enter                                                         │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ PASSO 6: Ver seu projeto rodando ─────────────────────────────────────┐
+│                                                                       │
+│  Quando tudo terminar, execute:                                      │
+│                                                                       │
+│  railway open                                                         │
+│                                                                       │
+│  Isso abre seu dashboard do Railway no navegador!                   │
+│                                                                       │
+│  Você vai ver:                                                        │
+│    • whatsapp-ai (seu app)                                           │
+│    • postgres (banco de dados)                                       │
+│    • redis (cache)                                                   │
+│                                                                       │
+│  Tudo pronto e rodando! ✅                                            │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌─ SE ALGO DER ERRADO ───────────────────────────────────────────────────┐
+│                                                                       │
+│  Erro: "railway: command not found"                                  │
+│    → Execute: npm install -g @railway/cli                            │
+│    → Depois tente de novo                                            │
+│                                                                       │
+│  Erro: "Not authenticated"                                           │
+│    → Execute: railway login                                          │
+│    → Autorize no navegador                                          │
+│    → Depois tente de novo                                            │
+│                                                                       │
+│  Outro erro qualquer:                                                │
+│    → Copie a mensagem de erro                                        │
+│    → Me envie a mensagem e eu ajudo!                                 │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+╔════════════════════════════════════════════════════════════════════════╗
+║                                                                        ║
+║  RESUMO:                                                               ║
+║  1. Abra Terminal/PowerShell                                          ║
+║  2. cd "C:\Users\Admin\OneDrive\Documents\whatsapp-ai"               ║
+║  3. bash CREATE-RAILWAY.sh                                            ║
+║  4. Autorize no navegador quando pedir                              ║
+║  5. Aguarde 5-10 minutos (tudo automático)                           ║
+║  6. Pronto! App rodando em Railway! 🎉                               ║
+║                                                                        ║
+║  Depois me avisa que eu faço a parte final!                          ║
+║                                                                        ║
+╚════════════════════════════════════════════════════════════════════════╝
