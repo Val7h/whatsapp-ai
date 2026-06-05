@@ -13,7 +13,8 @@ async function migrate() {
   try {
     // 1. Ler dados SQLite
     console.log('📂 Lendo dados do SQLite...');
-    const dbPath = path.join('/app', 'data', 'conversations.db');
+    const dbPath = path.join(process.cwd(), 'data', 'conversations.db');
+    console.log(`   Procurando em: ${dbPath}`);
     const db = new DatabaseSync(dbPath);
     const rows = db.prepare('SELECT * FROM conversations').all() as any[];
     console.log(`✅ ${rows.length} registros encontrados\n`);
