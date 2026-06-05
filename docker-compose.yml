@@ -1,0 +1,114 @@
+services:
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: cto-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - cto-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── WhatsApp AI Backend ────────────────────────────────────────────────────
+  whatsapp-ai:
+    build: .
+    container_name: cto-whatsapp-ai
+    restart: unless-stopped
+    ports:
+      - "3030:3000"
+    env_file:
+      - .env
+    environment:
+      # Sobrescreve REDIS_URL para apontar ao container redis
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - whatsapp_data:/app/data
+      - whatsapp_logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - cto-net
+
+  # ── PostgreSQL (Evolution API precisa) ────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: cto-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution123
+      POSTGRES_DB: evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cto-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Evolution API (WhatsApp) ───────────────────────────────────────────────
+  evolution-api:
+    image: atendai/evolution-api:latest
+    container_name: cto-evolution
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - evolution.env
+    volumes:
+      - evolution_data:/evolution/instances
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - cto-net
+
+  # ── n8n (Automação) ────────────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: cto-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/Recife
+      - TZ=America/Recife
+      # Variáveis usadas pelo workflow WhatsApp AI
+      - WEBHOOK_SECRET=meu-segredo-teste
+      - EVOLUTION_API_KEY=cto-evolution-key-2024
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - cto-net
+
+# ── Volumes ────────────────────────────────────────────────────────────────
+volumes:
+  redis_data:
+  evolution_data:
+  n8n_data:
+  postgres_data:
+  whatsapp_data:
+  whatsapp_logs:
+
+# ── Rede interna ──────────────────────────────────────────────────────────
+networks:
+  cto-net:
+    driver: bridge

@@ -1,0 +1,283 @@
+{
+  "name": "Pré-Consulta CTO — Formulário",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pre-consulta",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "pc-0001",
+      "name": "Webhook Pré-Consulta",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "pre-consulta"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Valida token HMAC-SHA256 ───────────────────────────────────────\nconst crypto = require('crypto');\n\nconst body = $input.first().json;\nconst { token, exp, agendamento_id } = body;\n\nif (!token || !exp || !agendamento_id) {\n  return [{ json: { erro: 'parametros_ausentes', valido: false } }];\n}\n\nconst expNum = parseInt(String(exp));\nif (Date.now() > expNum) {\n  return [{ json: { erro: 'token_expirado', valido: false, ...body } }];\n}\n\nconst secret = $env.FORM_SECRET;\nif (!secret) {\n  throw new Error('FORM_SECRET não configurado nas variáveis de ambiente do n8n');\n}\n\nconst esperado = crypto\n  .createHmac('sha256', secret)\n  .update(`${agendamento_id}:${expNum}`)\n  .digest('hex');\n\nconst valido = token === esperado;\n\nreturn [{ json: { valido, erro: valido ? null : 'token_invalido', ...body } }];\n"
+      },
+      "id": "pc-0002",
+      "name": "Validar Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "id": "cond-valido",
+              "leftValue": "={{ $json.valido }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equal" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "pc-0003",
+      "name": "Token válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, erro: $json.erro } }}",
+        "options": { "responseCode": 401 }
+      },
+      "id": "pc-0004",
+      "name": "Resposta Inválido",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Monta linha para o Google Sheets ─────────────────────────────\nconst d = $input.first().json;\nconst agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Recife' });\n\nconst doencas = Array.isArray(d.doencas_cronicas)\n  ? d.doencas_cronicas.join(', ')\n  : (d.doencas_cronicas || '');\n\nconst exames = Array.isArray(d.exames_urls)\n  ? d.exames_urls.join('\\n')\n  : (d.exames_urls || '');\n\nreturn [{\n  json: {\n    timestamp:              agora,\n    agendamento_id:         d.agendamento_id,\n    token:                  d.token,\n    status:                 'recebido',\n    nome:                   d.nome,\n    telefone:               d.telefone,\n    nascimento:             d.nascimento,\n    cpf:                    d.cpf,\n    cidade:                 d.cidade,\n    bairro:                 d.bairro,\n    profissao:              d.profissao,\n    estado_civil:           d.estado_civil,\n    filhos:                 d.filhos,\n    doencas_cronicas:       doencas,\n    medicacoes:             d.medicacoes,\n    alergias:               d.alergias,\n    cirurgias_anteriores:   d.cirurgias_anteriores,\n    tabagismo:              d.tabagismo,\n    alcool:                 d.alcool,\n    regiao_corpo:           d.regiao_corpo,\n    descricao:              d.descricao,\n    tempo_sintomas:         d.tempo_sintomas,\n    mecanismo:              d.mecanismo,\n    eva:                    d.eva,\n    piora:                  d.piora,\n    melhora:                d.melhora,\n    tratamento_anterior:    d.tratamento_anterior,\n    uso_analgesicos:        d.uso_analgesicos,\n    exames_urls:            exames,\n    forma_pagamento:        d.forma_pagamento,\n    plano_saude:            d.plano_saude || '',\n    pdf_drive_url:          '',\n    // passa adiante para os próximos nodes\n    _pdf_url:               d.pdf_url,\n    _nome:                  d.nome,\n    _telefone:              d.telefone,\n    _data_consulta:         d.data_consulta,\n    _agendamento_id:        d.agendamento_id,\n    _exames_urls_array:     d.exames_urls,\n  }\n}];\n"
+      },
+      "id": "pc-0005",
+      "name": "Montar linha Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.SHEETS_PRE_CONSULTA_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Pré-Consulta", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp":             "={{ $json.timestamp }}",
+            "agendamento_id":        "={{ $json.agendamento_id }}",
+            "token":                 "={{ $json.token }}",
+            "status":                "={{ $json.status }}",
+            "nome":                  "={{ $json.nome }}",
+            "telefone":              "={{ $json.telefone }}",
+            "nascimento":            "={{ $json.nascimento }}",
+            "cpf":                   "={{ $json.cpf }}",
+            "cidade":                "={{ $json.cidade }}",
+            "bairro":                "={{ $json.bairro }}",
+            "profissao":             "={{ $json.profissao }}",
+            "estado_civil":          "={{ $json.estado_civil }}",
+            "filhos":                "={{ $json.filhos }}",
+            "doencas_cronicas":      "={{ $json.doencas_cronicas }}",
+            "medicacoes":            "={{ $json.medicacoes }}",
+            "alergias":              "={{ $json.alergias }}",
+            "cirurgias_anteriores":  "={{ $json.cirurgias_anteriores }}",
+            "tabagismo":             "={{ $json.tabagismo }}",
+            "alcool":                "={{ $json.alcool }}",
+            "regiao_corpo":          "={{ $json.regiao_corpo }}",
+            "descricao":             "={{ $json.descricao }}",
+            "tempo_sintomas":        "={{ $json.tempo_sintomas }}",
+            "mecanismo":             "={{ $json.mecanismo }}",
+            "eva":                   "={{ $json.eva }}",
+            "piora":                 "={{ $json.piora }}",
+            "melhora":               "={{ $json.melhora }}",
+            "tratamento_anterior":   "={{ $json.tratamento_anterior }}",
+            "uso_analgesicos":       "={{ $json.uso_analgesicos }}",
+            "exames_urls":           "={{ $json.exames_urls }}",
+            "forma_pagamento":       "={{ $json.forma_pagamento }}",
+            "plano_saude":           "={{ $json.plano_saude }}",
+            "pdf_drive_url":         "={{ $json.pdf_drive_url }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "pc-0006",
+      "name": "Salvar no Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Prepara upload PDF + imagens para o Google Drive ─────────────\nconst d = $input.first().json;\n\nconst pastaBase = $env.GDRIVE_PASTA_PACIENTES || 'pacientes';\n\nreturn [{\n  json: {\n    ...d,\n    _pasta_nome: `${d._agendamento_id}`,\n    _pasta_parent: pastaBase,\n  }\n}];\n"
+      },
+      "id": "pc-0007",
+      "name": "Preparar Drive",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "createFolder",
+        "driveId": { "__rl": true, "value": "My Drive", "mode": "list" },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $env.GDRIVE_PASTA_PACIENTES_ID }}",
+          "mode": "id"
+        },
+        "name": "={{ $json._pasta_nome }}",
+        "options": {}
+      },
+      "id": "pc-0008",
+      "name": "Criar pasta paciente",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "name": "={{ 'pre-consulta_' + $('Montar linha Sheets').item.json._agendamento_id + '.pdf' }}",
+        "driveId": { "__rl": true, "value": "My Drive", "mode": "list" },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "binaryData": false,
+        "mediaUrl": "={{ $('Montar linha Sheets').item.json._pdf_url }}",
+        "options": { "keepRevisionForever": false }
+      },
+      "id": "pc-0009",
+      "name": "Upload PDF Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Formata mensagem WhatsApp para o médico ──────────────────────\nconst d = $('Montar linha Sheets').item.json;\nconst pdfDrive = $input.first().json.webViewLink || $input.first().json.webContentLink || d._pdf_url;\n\nconst dataConsulta = d._data_consulta\n  ? new Date(d._data_consulta).toLocaleString('pt-BR', {\n      timeZone: 'America/Recife',\n      day: '2-digit', month: '2-digit',\n      hour: '2-digit', minute: '2-digit'\n    })\n  : 'data não informada';\n\nconst alergia = d.alergias && d.alergias.toLowerCase() !== 'nenhuma conhecida' && d.alergias.trim() !== ''\n  ? `\\n⚠️ *Alergia:* ${d.alergias}`\n  : '';\n\nconst msg =\n  `📋 *Pré-consulta recebida*\\n` +\n  `👤 *${d.nome}*\\n` +\n  `📅 ${dataConsulta}\\n` +\n  `🦴 ${d.regiao_corpo} · EVA ${d.eva}/10${alergia}\\n` +\n  `📎 ${pdfDrive}`;\n\nreturn [{ json: { mensagem: msg, pdf_drive_url: pdfDrive, agendamento_id: d._agendamento_id } }];\n"
+      },
+      "id": "pc-0010",
+      "name": "Montar msg médico",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE_MEDICO }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "number",  "value": "={{ $env.MEDICO_TELEFONE }}" },
+            { "name": "text",    "value": "={{ $json.mensagem }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "pc-0011",
+      "name": "WhatsApp → Médico",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": { "__rl": true, "value": "primary", "mode": "list" },
+        "eventId": "={{ $('Montar msg médico').item.json.agendamento_id }}",
+        "updateFields": {
+          "description": "={{ '📋 Pré-consulta recebida\\n' + $('Montar msg médico').item.json.pdf_drive_url }}"
+        }
+      },
+      "id": "pc-0012",
+      "name": "Atualizar Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.1,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "pc-0013",
+      "name": "Resposta OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2660, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Pré-Consulta": {
+      "main": [[{ "node": "Validar Token", "type": "main", "index": 0 }]]
+    },
+    "Validar Token": {
+      "main": [[{ "node": "Token válido?", "type": "main", "index": 0 }]]
+    },
+    "Token válido?": {
+      "main": [
+        [{ "node": "Montar linha Sheets",  "type": "main", "index": 0 }],
+        [{ "node": "Resposta Inválido",    "type": "main", "index": 0 }]
+      ]
+    },
+    "Montar linha Sheets": {
+      "main": [[{ "node": "Salvar no Google Sheets", "type": "main", "index": 0 }]]
+    },
+    "Salvar no Google Sheets": {
+      "main": [[{ "node": "Preparar Drive", "type": "main", "index": 0 }]]
+    },
+    "Preparar Drive": {
+      "main": [[{ "node": "Criar pasta paciente", "type": "main", "index": 0 }]]
+    },
+    "Criar pasta paciente": {
+      "main": [[{ "node": "Upload PDF Drive", "type": "main", "index": 0 }]]
+    },
+    "Upload PDF Drive": {
+      "main": [[{ "node": "Montar msg médico", "type": "main", "index": 0 }]]
+    },
+    "Montar msg médico": {
+      "main": [[{ "node": "WhatsApp → Médico", "type": "main", "index": 0 }]]
+    },
+    "WhatsApp → Médico": {
+      "main": [[{ "node": "Atualizar Calendar", "type": "main", "index": 0 }]]
+    },
+    "Atualizar Calendar": {
+      "main": [[{ "node": "Resposta OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "last",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [{ "name": "cto" }, { "name": "pre-consulta" }],
+  "pinData": {}
+}

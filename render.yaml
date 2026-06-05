@@ -1,0 +1,44 @@
+services:
+  # Web Service Node.js
+  - type: web
+    name: whatsapp-ai-prod
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-4-20250514
+      - key: MAX_HISTORY_TURNS
+        value: "20"
+      - key: CLINIC_PHONE
+        value: "(83) 9999-9999"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+
+  # PostgreSQL Database
+  - type: pserv
+    name: whatsapp-ai-pg
+    plan: free
+    region: sa-1
+    postgreSQL:
+      version: "16"
+      user: whatsapp_admin
+      database: whatsapp_ai
+
+  # Redis Cache
+  - type: redis
+    name: whatsapp-ai-redis
+    plan: free
+    region: sa-1
+    evictionPolicy: volatile-lru
