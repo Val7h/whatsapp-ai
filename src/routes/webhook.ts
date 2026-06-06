@@ -64,10 +64,10 @@ function inferInstanceFromDDD(phone: string): string {
 
   const dddMapping: { [key: string]: string } = {
     '81': 'cto-caruaru',      // Pernambuco (Caruaru/Palmares)
+    '82': 'cto-caruaru',      // Alagoas (fronteira com Palmares-PE) → roteado para Caruaru/Palmares
     '83': 'cto-campina',      // Paraíba (Campina Grande)
     '85': 'cto-geral',        // Ceará
     '84': 'cto-geral',        // Rio Grande do Norte
-    '82': 'cto-geral',        // Alagoas
     '86': 'cto-geral',        // Piauí
     '87': 'cto-caruaru',      // Pernambuco interior (Caruaru)
   };
