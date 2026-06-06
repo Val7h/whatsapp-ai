@@ -145,12 +145,21 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // 6. Buscar histórico
   const history = await getHistory(phone);
 
-  // 7. Chamar Claude com o prompt do agente especializado
+  // 7. Injetar contexto de data/hora atual no prompt
+  const now = new Date();
+  const dayOfWeek = now.toLocaleDateString('pt-BR', { weekday: 'long' });
+  const dateStr = now.toLocaleDateString('pt-BR');
+  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const contextMessage = `[CONTEXTO ATUAL: ${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}, ${dateStr}, ${timeStr}]`;
+  const enhancedPrompt = `${agentPrompt}\n\n${contextMessage}`;
+
+  // 8. Chamar Claude com o prompt do agente especializado
   // Claude.askClaude() detecta se é prompt customizado (>200 chars ou contém "AGENTE")
   const { reply: rawReply, tokens_input, tokens_output } = await askClaude(
     history,
     message,
-    agentPrompt, // ← Prompt customizado do agente
+    enhancedPrompt, // ← Prompt customizado + contexto de data/hora
     instance
   );
 
