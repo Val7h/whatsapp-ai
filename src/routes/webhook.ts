@@ -158,7 +158,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   if (ddd === '81') {
     locationHint = '\n[DICA: Este cliente é de DDD 81 (Pernambuco). Ofereça Caruaru OU Palmares, não Campina Grande.]';
   } else if (ddd === '82') {
-    locationHint = '\n[DICA: Este cliente é de DDD 82 (Alagoas/fronteira). Ofereça Caruaru OU Palmares preferencialmente.]';
+    locationHint = '\n[DICA: Este cliente é de DDD 82 (Alagoas/fronteira com PE). Palmares é a opção mais próxima - ofereça Palmares preferencialmente.]';
   } else if (ddd === '83') {
     locationHint = '\n[DICA: Este cliente é de DDD 83 (Paraíba). Priorize Campina Grande.]';
   }
