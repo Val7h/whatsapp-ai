@@ -57,6 +57,24 @@ function isAllowedPhone(phone: string): boolean {
 // ── Detecção de urgência (migrada para PM Coordinator) ──────────────────
 // Mantém compatibilidade se necessário, mas agora usa URGENCIA agent
 
+// ── Detecção de DDD e Instance ────────────────────────────────────────────
+function inferInstanceFromDDD(phone: string): string {
+  // Extrai os primeiros 2 dígitos após '55' ou dos primeiros 2
+  const ddd = phone.replace(/\D/g, '').slice(-10, -8);
+
+  const dddMapping: { [key: string]: string } = {
+    '81': 'cto-caruaru',      // Pernambuco (Caruaru/Palmares)
+    '83': 'cto-campina',      // Paraíba (Campina Grande)
+    '85': 'cto-geral',        // Ceará
+    '84': 'cto-geral',        // Rio Grande do Norte
+    '82': 'cto-geral',        // Alagoas
+    '86': 'cto-geral',        // Piauí
+    '87': 'cto-caruaru',      // Pernambuco interior (Caruaru)
+  };
+
+  return dddMapping[ddd] ?? 'cto-geral';
+}
+
 // ── Validação do Webhook Secret ───────────────────────────────────────────
 function validateSecret(req: Request): boolean {
   const secret = process.env.WEBHOOK_SECRET;
@@ -85,7 +103,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { phone, name, message, instance } = parsed.data;
+  let { phone, name, message, instance } = parsed.data;
+
+  // ── Inferir instance do DDD se não fornecido ────────────────────────────
+  if (!instance) {
+    instance = inferInstanceFromDDD(phone);
+    logger.info(`[webhook] Instance inferido do DDD: ${instance}`);
+  }
 
   // 3. Whitelist
   if (!isAllowedPhone(phone)) {
@@ -101,7 +125,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  logger.info(`[webhook] Mensagem recebida de ${phone} (${name}) [${instance ?? 'geral'}]: "${message.slice(0, 60)}..."`);
+  logger.info(`[webhook] Mensagem recebida de ${phone} (${name}) [${instance}]: "${message.slice(0, 60)}..."`);
 
   // 5. ── PM COORDINATOR: Detectar tipo de problema ────────────────────────
   const detection = pm.detectProblemType(message);
