@@ -146,13 +146,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // 6. Buscar histórico
   const history = await getHistory(phone);
 
-  // 7. Injetar contexto de data/hora atual no prompt
+  // 7. Injetar contexto de data/hora e DDD no prompt
   const now = new Date();
   const dayOfWeek = now.toLocaleDateString('pt-BR', { weekday: 'long' });
   const dateStr = now.toLocaleDateString('pt-BR');
   const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-  const contextMessage = `[CONTEXTO ATUAL: ${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}, ${dateStr}, ${timeStr}]`;
+  // Extrair DDD do telefone
+  const ddd = phone.replace(/\D/g, '').slice(-10, -8);
+  let locationHint = '';
+  if (ddd === '81') {
+    locationHint = '\n[DICA: Este cliente é de DDD 81 (Pernambuco). Ofereça Caruaru OU Palmares, não Campina Grande.]';
+  } else if (ddd === '82') {
+    locationHint = '\n[DICA: Este cliente é de DDD 82 (Alagoas/fronteira). Ofereça Caruaru OU Palmares preferencialmente.]';
+  } else if (ddd === '83') {
+    locationHint = '\n[DICA: Este cliente é de DDD 83 (Paraíba). Priorize Campina Grande.]';
+  }
+
+  const contextMessage = `[CONTEXTO ATUAL: ${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}, ${dateStr}, ${timeStr}]${locationHint}`;
   const enhancedPrompt = `${agentPrompt}\n\n${contextMessage}`;
 
   // 8. Chamar Claude com o prompt do agente especializado
