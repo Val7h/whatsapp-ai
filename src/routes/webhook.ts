@@ -6,6 +6,7 @@ import { logConversation } from '../db/sqlite.js';
 import { logger } from '../services/logger.js';
 import { RateLimitMap, WebhookResponse } from '../types.js';
 import { loadAgents } from '../agents/loader.js';
+import { getSystemPrompt } from '../prompts/system.js';
 
 // ── Carregar agentes em runtime
 const { pm, AGENTS } = loadAgents();
@@ -139,8 +140,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const agentPrompt = agent.getSystemPrompt();
-  logger.info(`[pm-coordinator] Usando agente: ${agent.name} (confiança: ${(detection.confidence * 100).toFixed(0)}%)`);
+  // 5b. PRIORIDADE: Se instance é DDD específico (ddd-81-choice, ddd-82-palmares),
+  //                 USE o prompt de location em vez do agent genérico
+  let agentPrompt: string;
+  if (instance && instance.startsWith('ddd-')) {
+    agentPrompt = getSystemPrompt(instance);
+    logger.info(`[webhook] Usando prompt de localização DDD: ${instance}`);
+  } else {
+    agentPrompt = agent.getSystemPrompt();
+    logger.info(`[pm-coordinator] Usando agente: ${agent.name} (confiança: ${(detection.confidence * 100).toFixed(0)}%)`);
+  }
 
   // 6. Buscar histórico
   const history = await getHistory(phone);
