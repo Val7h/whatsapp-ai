@@ -71,7 +71,7 @@ function inferInstanceFromDDD(phone: string): string {
   const dddMapping: { [key: string]: string } = {
     '81': 'ddd-81-choice',    // Pernambuco (Caruaru OU Palmares) - prompt específico
     '82': 'ddd-82-palmares',  // Alagoas (Palmares é mais próximo) - prioriza Palmares
-    '83': 'cto-campina',      // Paraíba (Campina Grande) - sem ambiguidade
+    '83': 'ddd-83-campina',   // Paraíba (Campina Grande) - prioriza Campina
     '85': 'cto-geral',        // Ceará
     '84': 'cto-geral',        // Rio Grande do Norte
     '86': 'cto-geral',        // Piauí
