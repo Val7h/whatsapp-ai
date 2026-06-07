@@ -60,8 +60,13 @@ function isAllowedPhone(phone: string): boolean {
 
 // ── Detecção de DDD e Instance ────────────────────────────────────────────
 function inferInstanceFromDDD(phone: string): string {
-  // Extrai os primeiros 2 dígitos após '55' ou dos primeiros 2
-  const ddd = phone.replace(/\D/g, '').slice(-10, -8);
+  // Extrai DDD corretamente: remove non-digits, pula +55, pega primeiros 2 dígitos
+  let numeros = phone.replace(/\D/g, '');
+  // Se começa com 55 (código Brasil), pular e pegar os próximos 2 (DDD)
+  if (numeros.startsWith('55')) {
+    numeros = numeros.slice(2);
+  }
+  const ddd = numeros.slice(0, 2);
 
   const dddMapping: { [key: string]: string } = {
     '81': 'ddd-81-choice',    // Pernambuco (Caruaru OU Palmares) - prompt específico
