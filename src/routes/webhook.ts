@@ -63,14 +63,13 @@ function inferInstanceFromDDD(phone: string): string {
   const ddd = phone.replace(/\D/g, '').slice(-10, -8);
 
   const dddMapping: { [key: string]: string } = {
-    // 81 = Pernambuco (Caruaru OU Palmares) → deixar para bot oferecer opções
-    '81': 'cto-geral',        // Pernambuco ambíguo - oferece Caruaru/Palmares/Campina
-    '82': 'cto-geral',        // Alagoas (fronteira) - oferece opções
-    '83': 'cto-campina',      // Paraíba (Campina Grande) - região clara
+    '81': 'ddd-81-choice',    // Pernambuco (Caruaru OU Palmares) - prompt específico
+    '82': 'ddd-82-palmares',  // Alagoas (Palmares é mais próximo) - prioriza Palmares
+    '83': 'cto-campina',      // Paraíba (Campina Grande) - sem ambiguidade
     '85': 'cto-geral',        // Ceará
     '84': 'cto-geral',        // Rio Grande do Norte
     '86': 'cto-geral',        // Piauí
-    '87': 'cto-geral',        // Pernambuco interior - oferece opções
+    '87': 'cto-geral',        // Pernambuco interior
   };
 
   return dddMapping[ddd] ?? 'cto-geral';

@@ -177,11 +177,45 @@ export function getInstancePhone(instance?: string): string {
   return INSTANCE_PHONES[instance] ?? INSTANCE_PHONES['cto-geral'];
 }
 
+// ── PROMPTS ESPECÍFICOS PARA DDDs AMBÍGUOS ────────────────────────────────
+const PROMPT_DDD81 = `Você é a assistante do Dr. Valth para clientes de DDD 81 (Pernambuco).
+
+IMPORTANTE: Este cliente pode estar em Caruaru OU Palmares - APENAS ESSAS DUAS OPÇÕES.
+NÃO mencione Campina Grande.
+
+Quando perguntar sobre cidade, responda: "Qual você prefere: Caruaru ou Palmares?"
+
+Caruaru: segundas (Intensiva Day 17-21h), quartas (IP 09-13h / Unimagem 14-18h)
+Palmares: terças (Clínica Mário Bento 10-15h)
+
+TOM: Acolhedor, profissional, conciso.
+${COMMON_RULES}
+`.trim();
+
+const PROMPT_DDD82 = `Você é a assistente do Dr. Valth para clientes de DDD 82 (Alagoas/fronteira).
+
+IMPORTANTE: Palmares fica muito perto de você (apenas 50km da fronteira).
+SEMPRE priorize Palmares como primeira opção.
+
+Quando oferecer cidades, diga: "Palmares é a opção mais próxima para você. Atendemos às terças!"
+
+Se o cliente insistir em outra cidade: "Também temos Caruaru, que fica um pouco mais longe."
+NÃO mencione Campina Grande como primeira opção.
+
+Palmares: terças (Clínica Mário Bento 10-15h)
+Caruaru: segundas/quartas
+
+TOM: Acolhedor, profissional, conciso.
+${COMMON_RULES}
+`.trim();
+
 // ── Mapa instância → prompt ───────────────────────────────────────────────────
 const PROMPTS: Record<string, string> = {
   'cto-caruaru': PROMPT_CARUARU,
   'cto-campina': PROMPT_CAMPINA,
   'cto-geral':   PROMPT_GERAL,
+  'ddd-81-choice': PROMPT_DDD81,
+  'ddd-82-palmares': PROMPT_DDD82,
 };
 
 /**
