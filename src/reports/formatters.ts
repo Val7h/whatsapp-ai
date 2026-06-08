@@ -22,6 +22,7 @@ function pct(value: number, total: number): string {
 
 /**
  * RELATÓRIO DIÁRIO (enviado às 20h todo dia)
+ * FOCO: PACIENTES ÚNICOS (não mensagens)
  */
 export function formatDaily(stats: ReportStats): string {
   const date = formatDate(stats.period_start);
@@ -30,16 +31,27 @@ export function formatDaily(stats: ReportStats): string {
   lines.push(`🏥 *RELATÓRIO DIÁRIO* — ${date}`);
   lines.push(`Dr. Valth Guimarães — Ortopedia`);
   lines.push('');
-  lines.push('📊 *RESUMO*');
-  lines.push(`• Total de mensagens: ${stats.total_contacts}`);
-  lines.push(`• Pacientes únicos: ${stats.unique_patients}`);
-  lines.push(`• Novos pacientes: ${stats.new_patients}`);
-  lines.push(`• Retornos: ${stats.returning_patients}`);
+  lines.push('👥 *PACIENTES*');
+  lines.push(`• Total que entraram em contato: *${stats.unique_patients}*`);
+  lines.push(`• ✨ Novos (primeira vez): *${stats.new_patients}*`);
+  lines.push(`• 🔄 Retornantes: *${stats.returning_patients}*`);
   lines.push('');
 
+  // Lista NOVOS pacientes com detalhes
+  if (stats.new_patients_list.length > 0) {
+    lines.push('✨ *NOVOS PACIENTES DO DIA*');
+    stats.new_patients_list.slice(0, 15).forEach((p, i) => {
+      lines.push(`${i + 1}. *${p.name}* — ${p.city}`);
+      lines.push(`   _"${p.first_message}"_`);
+    });
+    if (stats.new_patients_list.length > 15) {
+      lines.push(`_...e mais ${stats.new_patients_list.length - 15} novos pacientes_`);
+    }
+    lines.push('');
+  }
+
   if (Object.keys(stats.by_city).length > 0) {
-    lines.push('📍 *POR CIDADE*');
-    const maxCity = Math.max(...Object.values(stats.by_city));
+    lines.push('📍 *PACIENTES POR CIDADE*');
     const sortedCities = Object.entries(stats.by_city).sort((a, b) => b[1] - a[1]);
     for (const [city, count] of sortedCities) {
       lines.push(`• ${city}: ${count} (${pct(count, stats.unique_patients)})`);
@@ -48,23 +60,23 @@ export function formatDaily(stats: ReportStats): string {
   }
 
   if (Object.keys(stats.by_intent).length > 0) {
-    lines.push('🎯 *INTENÇÕES*');
+    lines.push('🎯 *INTENÇÕES* (pacientes únicos)');
     const sortedIntents = Object.entries(stats.by_intent).sort((a, b) => b[1] - a[1]);
     for (const [intent, count] of sortedIntents.slice(0, 6)) {
-      lines.push(`• ${intent}: ${count}`);
+      lines.push(`• ${intent}: ${count} paciente(s)`);
     }
     lines.push('');
   }
 
   lines.push('✅ *CONVERSÕES*');
-  lines.push(`• Possíveis agendamentos: ${stats.conversions}`);
+  lines.push(`• Pacientes que confirmaram: ${stats.conversions}`);
   lines.push(`• Taxa de conversão: ${stats.conversion_rate.toFixed(0)}%`);
   lines.push('');
 
-  lines.push('⏱️ *HORÁRIOS DE PICO*');
-  lines.push(`• Manhã (até 12h): ${stats.by_hour.morning}`);
-  lines.push(`• Tarde (12h-18h): ${stats.by_hour.afternoon}`);
-  lines.push(`• Noite (após 18h): ${stats.by_hour.evening}`);
+  lines.push('⏱️ *HORÁRIOS DE PROCURA*');
+  lines.push(`• Manhã (até 12h): ${stats.by_hour.morning} pacientes`);
+  lines.push(`• Tarde (12h-18h): ${stats.by_hour.afternoon} pacientes`);
+  lines.push(`• Noite (após 18h): ${stats.by_hour.evening} pacientes`);
   lines.push('');
 
   if (stats.alerts.length > 0) {
@@ -86,8 +98,8 @@ export function formatDaily(stats: ReportStats): string {
   }
 
   lines.push('🤖 *SISTEMA*');
+  lines.push(`• ${stats.total_messages} mensagens processadas`);
   lines.push(`• Tokens usados: ${stats.tokens_total.toLocaleString('pt-BR')}`);
-  lines.push(`• Tamanho médio resposta: ${stats.avg_response_chars} chars`);
   lines.push(`• Status: 🟢 Online`);
   lines.push('');
   lines.push('_Relatório automático às 20h_');
@@ -107,23 +119,34 @@ export function formatWeekly(stats: ReportStats, prevWeek?: ReportStats): string
   lines.push(`Semana: ${start} a ${end}`);
   lines.push(`Dr. Valth Guimarães — Ortopedia`);
   lines.push('');
-  lines.push('📊 *NÚMEROS DA SEMANA*');
-  lines.push(`• Total de contatos: ${stats.total_contacts}`);
-  lines.push(`• Pacientes únicos: ${stats.unique_patients}`);
-  lines.push(`• Novos pacientes: ${stats.new_patients}`);
-  lines.push(`• Retornos: ${stats.returning_patients}`);
-  lines.push(`• Conversões: ${stats.conversions} (${stats.conversion_rate.toFixed(0)}%)`);
+  lines.push('👥 *PACIENTES DA SEMANA*');
+  lines.push(`• Total que entraram em contato: *${stats.unique_patients}*`);
+  lines.push(`• ✨ Novos pacientes: *${stats.new_patients}*`);
+  lines.push(`• 🔄 Retornantes: *${stats.returning_patients}*`);
+  lines.push(`• ✅ Conversões: ${stats.conversions} (${stats.conversion_rate.toFixed(0)}%)`);
   lines.push('');
 
   if (prevWeek) {
     lines.push('📈 *COMPARATIVO COM SEMANA ANTERIOR*');
-    const diffContacts = stats.total_contacts - prevWeek.total_contacts;
     const diffPatients = stats.unique_patients - prevWeek.unique_patients;
+    const diffNew = stats.new_patients - prevWeek.new_patients;
     const diffConv = stats.conversions - prevWeek.conversions;
     const arrow = (n: number) => (n > 0 ? '📈 +' : n < 0 ? '📉 ' : '➡️ ');
-    lines.push(`• Contatos: ${arrow(diffContacts)}${diffContacts}`);
     lines.push(`• Pacientes: ${arrow(diffPatients)}${diffPatients}`);
+    lines.push(`• Novos: ${arrow(diffNew)}${diffNew}`);
     lines.push(`• Conversões: ${arrow(diffConv)}${diffConv}`);
+    lines.push('');
+  }
+
+  // Lista NOVOS pacientes
+  if (stats.new_patients_list.length > 0) {
+    lines.push('✨ *NOVOS PACIENTES DA SEMANA*');
+    stats.new_patients_list.slice(0, 25).forEach((p, i) => {
+      lines.push(`${i + 1}. *${p.name}* (${p.city})`);
+    });
+    if (stats.new_patients_list.length > 25) {
+      lines.push(`_...e mais ${stats.new_patients_list.length - 25}_`);
+    }
     lines.push('');
   }
 
@@ -187,12 +210,11 @@ export function formatMonthly(stats: ReportStats, prevMonth?: ReportStats): stri
   lines.push(`Mês: ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`);
   lines.push(`Dr. Valth Guimarães — Ortopedia`);
   lines.push('');
-  lines.push('📊 *NÚMEROS DO MÊS*');
-  lines.push(`• Total de contatos: ${stats.total_contacts}`);
-  lines.push(`• Pacientes únicos: ${stats.unique_patients}`);
-  lines.push(`• Novos pacientes: ${stats.new_patients}`);
-  lines.push(`• Pacientes retornantes: ${stats.returning_patients}`);
-  lines.push(`• Conversões: ${stats.conversions}`);
+  lines.push('👥 *PACIENTES DO MÊS*');
+  lines.push(`• Total que entraram em contato: *${stats.unique_patients}*`);
+  lines.push(`• ✨ Novos pacientes: *${stats.new_patients}*`);
+  lines.push(`• 🔄 Pacientes retornantes: *${stats.returning_patients}*`);
+  lines.push(`• ✅ Conversões: ${stats.conversions}`);
   lines.push(`• Taxa de conversão: ${stats.conversion_rate.toFixed(1)}%`);
   lines.push('');
 
@@ -203,7 +225,6 @@ export function formatMonthly(stats: ReportStats, prevMonth?: ReportStats): stri
       const g = ((curr - prev) / prev) * 100;
       return `${g > 0 ? '+' : ''}${g.toFixed(0)}%`;
     };
-    lines.push(`• Contatos: ${calcGrowth(stats.total_contacts, prevMonth.total_contacts)}`);
     lines.push(`• Pacientes únicos: ${calcGrowth(stats.unique_patients, prevMonth.unique_patients)}`);
     lines.push(`• Novos pacientes: ${calcGrowth(stats.new_patients, prevMonth.new_patients)}`);
     lines.push(`• Conversões: ${calcGrowth(stats.conversions, prevMonth.conversions)}`);

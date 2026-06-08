@@ -24,16 +24,17 @@ export interface Conversation {
 export interface ReportStats {
   period_start: string;
   period_end: string;
-  total_contacts: number;
+  total_messages: number;
   unique_patients: number;
   new_patients: number;
   returning_patients: number;
-  by_city: { [city: string]: number };
-  by_intent: { [intent: string]: number };
+  new_patients_list: Array<{ name: string; phone: string; city: string; first_message: string }>;
+  by_city: { [city: string]: number }; // pacientes únicos por cidade
+  by_intent: { [intent: string]: number }; // pacientes únicos por intenção
   conversions: number;
   conversion_rate: number;
-  by_hour: { morning: number; afternoon: number; evening: number };
-  urgencies: number;
+  by_hour: { morning: number; afternoon: number; evening: number }; // pacientes únicos
+  urgencies: number; // pacientes únicos com urgência
   human_intervention_needed: number;
   errors: string[];
   tokens_total: number;
@@ -161,7 +162,7 @@ function detectIssues(conversations: Conversation[]): { errors: string[]; needsI
 }
 
 /**
- * Gera estatísticas para um período
+ * Gera estatísticas para um período — FOCO EM PACIENTES ÚNICOS
  */
 export function generateStats(startDate: Date, endDate: Date): ReportStats {
   const db = new DatabaseSync(DB_PATH);
@@ -174,53 +175,67 @@ export function generateStats(startDate: Date, endDate: Date): ReportStats {
     )
     .all(startDate.toISOString(), endDate.toISOString()) as unknown as Conversation[];
 
-  // Total e únicos
-  const uniquePhones = new Set(conversations.map((c) => c.phone));
+  // Agrupar conversas por phone (cada paciente único)
+  const byPhone: { [k: string]: Conversation[] } = {};
+  for (const conv of conversations) {
+    if (!byPhone[conv.phone]) byPhone[conv.phone] = [];
+    byPhone[conv.phone].push(conv);
+  }
 
-  // Identificar novos vs retornantes (com base no histórico ANTERIOR ao período)
+  const uniquePhones = Object.keys(byPhone);
+
+  // Identificar NOVOS pacientes (que nunca tiveram conversa antes do período)
   const previousPhones = new Set(
     (db
       .prepare(`SELECT DISTINCT phone FROM conversations WHERE created_at < ?`)
       .all(startDate.toISOString()) as { phone: string }[]).map((r) => r.phone)
   );
-  const newPatients = [...uniquePhones].filter((p) => !previousPhones.has(p));
-  const returningPatients = [...uniquePhones].filter((p) => previousPhones.has(p));
 
-  // Por cidade
-  const byCity: { [k: string]: Set<string> } = {};
-  // Por intenção
-  const byIntent: { [k: string]: number } = {};
-  // Por hora
-  const byHour = { morning: 0, afternoon: 0, evening: 0 };
-  // Tokens
+  const newPatientPhones = uniquePhones.filter((p) => !previousPhones.has(p));
+  const returningPhones = uniquePhones.filter((p) => previousPhones.has(p));
+
+  // Listar NOVOS pacientes com detalhes
+  const newPatientsList = newPatientPhones.map((phone) => {
+    const convs = byPhone[phone];
+    const firstConv = convs[0];
+    const lastConv = convs[convs.length - 1];
+    return {
+      name: lastConv.patient_name || firstConv.patient_name || 'Sem nome',
+      phone: phone.replace(/@.*/, ''),
+      city: detectCity(phone, firstConv.user_message, firstConv.assistant_reply),
+      first_message: firstConv.user_message.slice(0, 80),
+    };
+  });
+
+  // ── ESTATÍSTICAS POR PACIENTE ÚNICO (não por mensagem) ──
+  const patientsByCity: { [k: string]: Set<string> } = {};
+  const patientsByIntent: { [k: string]: Set<string> } = {};
+  const patientsByHour = { morning: new Set<string>(), afternoon: new Set<string>(), evening: new Set<string>() };
+  const urgentPatients = new Set<string>();
+
   let tokensTotal = 0;
   let replyCharsTotal = 0;
-  // Urgências
-  let urgencies = 0;
-
-  // Agrupar conversas por phone para detectar conversões
-  const byPhone: { [k: string]: Conversation[] } = {};
 
   for (const conv of conversations) {
-    const city = detectCity(conv.phone, conv.user_message, conv.assistant_reply);
-    if (!byCity[city]) byCity[city] = new Set();
-    byCity[city].add(conv.phone);
+    const phone = conv.phone;
+
+    const city = detectCity(phone, conv.user_message, conv.assistant_reply);
+    if (!patientsByCity[city]) patientsByCity[city] = new Set();
+    patientsByCity[city].add(phone);
 
     const intent = detectIntent(conv.user_message);
-    byIntent[intent] = (byIntent[intent] || 0) + 1;
+    if (!patientsByIntent[intent]) patientsByIntent[intent] = new Set();
+    patientsByIntent[intent].add(phone);
 
-    if (intent === 'Urgência') urgencies++;
+    if (intent === 'Urgência') urgentPatients.add(phone);
 
     const hour = new Date(conv.created_at).getHours();
-    if (hour < 12) byHour.morning++;
-    else if (hour < 18) byHour.afternoon++;
-    else byHour.evening++;
+    if (hour < 12) patientsByHour.morning.add(phone);
+    else if (hour < 18) patientsByHour.afternoon.add(phone);
+    else patientsByHour.evening.add(phone);
 
     tokensTotal += (conv.tokens_input || 0) + (conv.tokens_output || 0);
     replyCharsTotal += (conv.assistant_reply || '').length;
-
-    if (!byPhone[conv.phone]) byPhone[conv.phone] = [];
-    byPhone[conv.phone].push(conv);
   }
 
   // Conversões: pacientes únicos que confirmaram
@@ -229,10 +244,10 @@ export function generateStats(startDate: Date, endDate: Date): ReportStats {
     if (detectConversion(byPhone[phone])) conversions++;
   }
 
-  // Top pacientes (mais mensagens)
+  // Top pacientes mais ativos (por número de mensagens)
   const topPatients = Object.entries(byPhone)
     .map(([phone, convs]) => ({
-      phone,
+      phone: phone.replace(/@.*/, ''),
       name: convs[convs.length - 1].patient_name || 'Sem nome',
       count: convs.length,
     }))
@@ -244,50 +259,63 @@ export function generateStats(startDate: Date, endDate: Date): ReportStats {
 
   // Alertas
   const alerts: string[] = [];
-  if (urgencies > 0) alerts.push(`${urgencies} paciente(s) com urgência atendido(s)`);
+  if (urgentPatients.size > 0) alerts.push(`${urgentPatients.size} paciente(s) com urgência`);
   if (needsIntervention) alerts.push('Algumas conversas precisaram de intervenção humana');
   if (errors.length > 0) alerts.push(`${errors.length} erro(s) técnico(s) detectado(s)`);
-  if (uniquePhones.size === 0) alerts.push('Nenhum contato hoje - verificar se o sistema está online');
+  if (uniquePhones.length === 0) alerts.push('Nenhum paciente hoje - verificar sistema');
 
   // Insights
   const insights: string[] = [];
-  const topCity = Object.entries(byCity)
+  const topCity = Object.entries(patientsByCity)
     .sort((a, b) => b[1].size - a[1].size)[0];
   if (topCity) insights.push(`Cidade mais procurada: ${topCity[0]} (${topCity[1].size} pacientes)`);
 
-  const peakHour = Object.entries(byHour).sort((a, b) => b[1] - a[1])[0];
-  if (peakHour && peakHour[1] > 0) {
+  const peakHourEntry = Object.entries(patientsByHour).sort((a, b) => b[1].size - a[1].size)[0];
+  if (peakHourEntry && peakHourEntry[1].size > 0) {
     const labels: { [k: string]: string } = { morning: 'manhã', afternoon: 'tarde', evening: 'noite' };
-    insights.push(`Pico de procura: ${labels[peakHour[0]]} (${peakHour[1]} contatos)`);
+    insights.push(`Pico de procura: ${labels[peakHourEntry[0]]} (${peakHourEntry[1].size} pacientes)`);
   }
 
-  const conversionRate = uniquePhones.size > 0 ? (conversions / uniquePhones.size) * 100 : 0;
+  const conversionRate = uniquePhones.length > 0 ? (conversions / uniquePhones.length) * 100 : 0;
   if (conversionRate > 50) insights.push(`Excelente taxa de conversão: ${conversionRate.toFixed(0)}%`);
-  else if (conversionRate < 20 && uniquePhones.size > 5) insights.push(`Taxa de conversão baixa: ${conversionRate.toFixed(0)}% - considerar revisar prompts`);
+  else if (conversionRate < 20 && uniquePhones.length > 5)
+    insights.push(`Taxa de conversão baixa: ${conversionRate.toFixed(0)}% — revisar prompts`);
 
-  if (newPatients.length > returningPatients.length * 2) {
-    insights.push('Muitos pacientes NOVOS - crescimento orgânico');
+  if (newPatientPhones.length > returningPhones.length * 2 && newPatientPhones.length > 3) {
+    insights.push('Muitos pacientes NOVOS - crescimento orgânico forte');
+  }
+
+  if (newPatientPhones.length === 0 && uniquePhones.length > 0) {
+    insights.push('Nenhum paciente novo no período - apenas retornantes');
   }
 
   db.close();
 
   // Transformar Sets em counts
   const byCityCount: { [k: string]: number } = {};
-  for (const k in byCity) byCityCount[k] = byCity[k].size;
+  for (const k in patientsByCity) byCityCount[k] = patientsByCity[k].size;
+
+  const byIntentCount: { [k: string]: number } = {};
+  for (const k in patientsByIntent) byIntentCount[k] = patientsByIntent[k].size;
 
   return {
     period_start: startDate.toISOString(),
     period_end: endDate.toISOString(),
-    total_contacts: conversations.length,
-    unique_patients: uniquePhones.size,
-    new_patients: newPatients.length,
-    returning_patients: returningPatients.length,
+    total_messages: conversations.length,
+    unique_patients: uniquePhones.length,
+    new_patients: newPatientPhones.length,
+    returning_patients: returningPhones.length,
+    new_patients_list: newPatientsList,
     by_city: byCityCount,
-    by_intent: byIntent,
+    by_intent: byIntentCount,
     conversions,
     conversion_rate: conversionRate,
-    by_hour: byHour,
-    urgencies,
+    by_hour: {
+      morning: patientsByHour.morning.size,
+      afternoon: patientsByHour.afternoon.size,
+      evening: patientsByHour.evening.size,
+    },
+    urgencies: urgentPatients.size,
     human_intervention_needed: errors.filter((e) => e.includes('reclama') || e.includes('falar com')).length,
     errors,
     tokens_total: tokensTotal,
