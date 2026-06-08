@@ -6,7 +6,7 @@
 // @ts-ignore
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
-import { extractDDD, cityFromDDD, isValidBrazilianDDD } from '../services/phone.js';
+import { extractDDD, cityFromDDD, isValidBrazilianDDD, isValidPatient } from '../services/phone.js';
 
 const DB_PATH = process.env.SQLITE_PATH || path.join(process.cwd(), 'data', 'conversations.db');
 
@@ -61,7 +61,10 @@ function detectCity(phone: string, message: string, reply: string): string {
     return 'Palmares (PE)';
   }
 
-  // Por DDD válido
+  // LID - WhatsApp Business sem DDD
+  if (ddd === 'lid') return cityFromDDD('lid', message);
+
+  // Por DDD válido brasileiro
   if (ddd !== 'invalid' && isValidBrazilianDDD(ddd)) {
     return cityFromDDD(ddd, message);
   }

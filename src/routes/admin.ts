@@ -196,6 +196,7 @@ router.get('/db/by-ddd', async (_req: Request, res: Response) => {
     const byDdd: { [key: string]: number } = {};
     const byCity: { [key: string]: number } = {};
     let invalidJids = 0;
+    let lidPatients = 0;
 
     for (const row of all) {
       const ddd = extractDDD(row.phone || '');
@@ -203,10 +204,9 @@ router.get('/db/by-ddd', async (_req: Request, res: Response) => {
         invalidJids++;
         continue;
       }
+      if (ddd === 'lid') lidPatients++;
       byDdd[ddd] = (byDdd[ddd] || 0) + 1;
-      const city = isValidBrazilianDDD(ddd)
-        ? cityFromDDD(ddd, row.user_message || '')
-        : `DDD inválido (${ddd})`;
+      const city = cityFromDDD(ddd, row.user_message || '');
       byCity[city] = (byCity[city] || 0) + 1;
     }
 
@@ -217,6 +217,7 @@ router.get('/db/by-ddd', async (_req: Request, res: Response) => {
     const byDdd24h: { [key: string]: number } = {};
     const byCity24h: { [key: string]: number } = {};
     let invalidJids24h = 0;
+    let lidPatients24h = 0;
 
     for (const row of last24h) {
       const ddd = extractDDD(row.phone || '');
@@ -224,21 +225,22 @@ router.get('/db/by-ddd', async (_req: Request, res: Response) => {
         invalidJids24h++;
         continue;
       }
+      if (ddd === 'lid') lidPatients24h++;
       byDdd24h[ddd] = (byDdd24h[ddd] || 0) + 1;
-      const city = isValidBrazilianDDD(ddd)
-        ? cityFromDDD(ddd, row.user_message || '')
-        : `DDD inválido (${ddd})`;
+      const city = cityFromDDD(ddd, row.user_message || '');
       byCity24h[city] = (byCity24h[city] || 0) + 1;
     }
 
     db.close();
     res.json({
       total: all.length,
-      invalid_jids_total: invalidJids,
+      invalid_messages: invalidJids,
+      lid_patients_total: lidPatients,
       by_ddd_total: byDdd,
       by_city_total: byCity,
       last_24h: last24h.length,
-      invalid_jids_24h: invalidJids24h,
+      invalid_messages_24h: invalidJids24h,
+      lid_patients_24h: lidPatients24h,
       by_ddd_last_24h: byDdd24h,
       by_city_last_24h: byCity24h,
     });

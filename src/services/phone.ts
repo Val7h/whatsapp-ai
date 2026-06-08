@@ -22,16 +22,17 @@ export function normalizePhone(rawPhone: string): string {
  * Suporta:
  *   - 5583993476410 (com código do país 55)
  *   - 83993476410 (sem código do país)
- *   - 5583999999999@s.whatsapp.net (JID)
- *   - 12345@lid (não é telefone real - retorna 'invalid')
+ *   - 5583999999999@s.whatsapp.net (JID com número real)
+ *   - 12345@lid (LID do WhatsApp Business - retorna 'lid')
  *
- * Retorna 2 dígitos do DDD ou 'invalid'
+ * Retorna 2 dígitos do DDD, 'lid' (paciente real sem DDD) ou 'invalid'
  */
 export function extractDDD(rawPhone: string): string {
   if (!rawPhone) return 'invalid';
 
-  // @lid não é um telefone real - é um identificador interno do WhatsApp
-  if (rawPhone.includes('@lid')) return 'invalid';
+  // @lid = LID do WhatsApp Business (Linked Identity)
+  // É um paciente REAL, mas WhatsApp ocultou o número
+  if (rawPhone.includes('@lid')) return 'lid';
 
   const phone = normalizePhone(rawPhone);
 
@@ -48,6 +49,16 @@ export function extractDDD(rawPhone: string): string {
   }
 
   return 'invalid';
+}
+
+/**
+ * Verifica se é um paciente válido (qualquer formato de WhatsApp)
+ */
+export function isValidPatient(rawPhone: string): boolean {
+  const ddd = extractDDD(rawPhone);
+  if (ddd === 'invalid') return false;
+  if (ddd === 'lid') return true; // LID é paciente real, só sem DDD
+  return isValidBrazilianDDD(ddd);
 }
 
 /**
@@ -94,6 +105,15 @@ export function cityFromDDD(ddd: string, messageText: string = ''): string {
   if (ddd === 'invalid') return 'Inválido';
 
   const text = messageText.toLowerCase();
+
+  // LID = WhatsApp Business sem DDD visível
+  // Tenta detectar pela mensagem
+  if (ddd === 'lid') {
+    if (text.includes('campina grande') || text.includes('campina')) return 'Campina Grande (PB)';
+    if (text.includes('palmares')) return 'Palmares (PE)';
+    if (text.includes('caruaru')) return 'Caruaru (PE)';
+    return 'Não identificado (WhatsApp sem DDD)';
+  }
 
   // DDDs com unidades do Dr. Valth
   if (ddd === '83') return 'Campina Grande (PB)';
