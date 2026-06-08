@@ -244,7 +244,7 @@ export function formatMonthly(stats: ReportStats, prevMonth?: ReportStats): stri
     lines.push('🎯 *PERFIL DE ATENDIMENTO*');
     const sortedIntents = Object.entries(stats.by_intent).sort((a, b) => b[1] - a[1]);
     for (const [intent, count] of sortedIntents) {
-      lines.push(`• ${intent}: ${count} (${pct(count, stats.total_contacts)})`);
+      lines.push(`• ${intent}: ${count} (${pct(count, stats.unique_patients)})`);
     }
     lines.push('');
   }
@@ -259,9 +259,9 @@ export function formatMonthly(stats: ReportStats, prevMonth?: ReportStats): stri
   }
 
   lines.push('⏱️ *DISTRIBUIÇÃO POR HORÁRIO*');
-  lines.push(`• Manhã: ${stats.by_hour.morning} (${pct(stats.by_hour.morning, stats.total_contacts)})`);
-  lines.push(`• Tarde: ${stats.by_hour.afternoon} (${pct(stats.by_hour.afternoon, stats.total_contacts)})`);
-  lines.push(`• Noite: ${stats.by_hour.evening} (${pct(stats.by_hour.evening, stats.total_contacts)})`);
+  lines.push(`• Manhã: ${stats.by_hour.morning} (${pct(stats.by_hour.morning, stats.unique_patients)})`);
+  lines.push(`• Tarde: ${stats.by_hour.afternoon} (${pct(stats.by_hour.afternoon, stats.unique_patients)})`);
+  lines.push(`• Noite: ${stats.by_hour.evening} (${pct(stats.by_hour.evening, stats.unique_patients)})`);
   lines.push('');
 
   if (stats.urgencies > 0) {
