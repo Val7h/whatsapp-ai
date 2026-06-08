@@ -6,6 +6,7 @@
 // @ts-ignore
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
+import { extractDDD, cityFromDDD, isValidBrazilianDDD } from '../services/phone.js';
 
 const DB_PATH = process.env.SQLITE_PATH || path.join(process.cwd(), 'data', 'conversations.db');
 
@@ -46,30 +47,26 @@ export interface ReportStats {
  * Detecta cidade pelo DDD ou pelo conteúdo da mensagem
  */
 function detectCity(phone: string, message: string, reply: string): string {
-  const ddd = phone.replace(/\D/g, '').slice(2, 4);
+  const ddd = extractDDD(phone);
   const text = (message + ' ' + reply).toLowerCase();
 
-  // Por DDD
-  if (ddd === '83') return 'Campina Grande';
-  if (ddd === '81' || ddd === '87') {
-    // DDD 81 pode ser Caruaru ou Palmares
-    if (text.includes('palmares')) return 'Palmares';
-    if (text.includes('caruaru')) return 'Caruaru';
-    return 'Caruaru/Palmares';
-  }
-  if (ddd === '82') return 'Palmares (Alagoas)';
-
-  // Por conteúdo
-  if (text.includes('campina grande') || text.includes('cto') || text.includes('artro')) {
-    return 'Campina Grande';
+  // Por conteúdo primeiro (mais preciso quando paciente menciona)
+  if (text.includes('campina grande') || text.includes('cto ') || text.includes('artro')) {
+    return 'Campina Grande (PB)';
   }
   if (text.includes('caruaru') || text.includes('unimagem') || text.includes('instituto pernambuco')) {
-    return 'Caruaru';
+    return 'Caruaru (PE)';
   }
   if (text.includes('palmares') || text.includes('mário bento')) {
-    return 'Palmares';
+    return 'Palmares (PE)';
   }
-  return 'Outros';
+
+  // Por DDD válido
+  if (ddd !== 'invalid' && isValidBrazilianDDD(ddd)) {
+    return cityFromDDD(ddd, message);
+  }
+
+  return 'Não identificado';
 }
 
 /**

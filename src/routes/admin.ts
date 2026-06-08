@@ -122,44 +122,58 @@ router.get('/db/by-ddd', async (_req: Request, res: Response) => {
   try {
     // @ts-ignore
     const { DatabaseSync } = await import('node:sqlite');
+    const { extractDDD, cityFromDDD, isValidBrazilianDDD } = await import('../services/phone.js');
     const db = new DatabaseSync('/app/data/conversations.db');
 
-    const all = db.prepare(`SELECT phone FROM conversations`).all() as any[];
+    const all = db.prepare(`SELECT phone, user_message FROM conversations`).all() as any[];
     const byDdd: { [key: string]: number } = {};
+    const byCity: { [key: string]: number } = {};
+    let invalidJids = 0;
 
     for (const row of all) {
-      const phone = (row.phone || '').replace(/\D/g, '');
-      let ddd = 'desconhecido';
-      if (phone.startsWith('55') && phone.length >= 12) {
-        ddd = phone.slice(2, 4);
-      } else if (phone.length >= 10) {
-        ddd = phone.slice(0, 2);
+      const ddd = extractDDD(row.phone || '');
+      if (ddd === 'invalid') {
+        invalidJids++;
+        continue;
       }
       byDdd[ddd] = (byDdd[ddd] || 0) + 1;
+      const city = isValidBrazilianDDD(ddd)
+        ? cityFromDDD(ddd, row.user_message || '')
+        : `DDD inválido (${ddd})`;
+      byCity[city] = (byCity[city] || 0) + 1;
     }
 
     // Mensagens nas últimas 24h
     const last24h = db.prepare(
-      `SELECT phone FROM conversations WHERE created_at >= datetime('now', '-1 day')`
+      `SELECT phone, user_message FROM conversations WHERE created_at >= datetime('now', '-1 day')`
     ).all() as any[];
     const byDdd24h: { [key: string]: number } = {};
+    const byCity24h: { [key: string]: number } = {};
+    let invalidJids24h = 0;
+
     for (const row of last24h) {
-      const phone = (row.phone || '').replace(/\D/g, '');
-      let ddd = 'desconhecido';
-      if (phone.startsWith('55') && phone.length >= 12) {
-        ddd = phone.slice(2, 4);
-      } else if (phone.length >= 10) {
-        ddd = phone.slice(0, 2);
+      const ddd = extractDDD(row.phone || '');
+      if (ddd === 'invalid') {
+        invalidJids24h++;
+        continue;
       }
       byDdd24h[ddd] = (byDdd24h[ddd] || 0) + 1;
+      const city = isValidBrazilianDDD(ddd)
+        ? cityFromDDD(ddd, row.user_message || '')
+        : `DDD inválido (${ddd})`;
+      byCity24h[city] = (byCity24h[city] || 0) + 1;
     }
 
     db.close();
     res.json({
       total: all.length,
+      invalid_jids_total: invalidJids,
       by_ddd_total: byDdd,
+      by_city_total: byCity,
       last_24h: last24h.length,
+      invalid_jids_24h: invalidJids24h,
       by_ddd_last_24h: byDdd24h,
+      by_city_last_24h: byCity24h,
     });
   } catch (err) {
     res.status(500).json({ error: String(err) });
