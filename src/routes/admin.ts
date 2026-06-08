@@ -476,6 +476,41 @@ router.post('/report/monthly/send', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * Identifica se uma mensagem é de teste (critério CONSERVADOR — só apaga se TEM certeza)
+ *
+ * Apenas considera TESTE se:
+ * 1. Telefone tem padrão claramente fake: 5581111111111, 5583333333333, 5581900000XXX
+ * 2. Nome explicitamente é "Teste", "Test", "T81", "T82", "DDD81"
+ *
+ * NÃO apaga nomes comuns como "Maria", "João", "Pedro" (podem ser pacientes reais)
+ */
+function isTestMessage(phone: string, name: string): boolean {
+  const phoneDigits = (phone || '').replace(/\D/g, '');
+  const nameTrim = (name || '').trim();
+
+  // Telefones com dígitos repetidos (5581111111111, 5582222222222, etc)
+  if (/^55(\d)\1{8,}$/.test(phoneDigits)) return true;
+  if (/^55\d(\d)\1{7,}$/.test(phoneDigits)) return true;
+
+  // Telefones com padrão 558X9000000XX (faixa de testes manuais)
+  if (/^558[1-9]900000\d{3}$/.test(phoneDigits)) return true;
+
+  // Telefones específicos de teste (que usei explicitamente)
+  if (/^5583991234567$/.test(phoneDigits)) return true;
+  if (/^5581999000111$/.test(phoneDigits)) return true;
+
+  // Nome começando explicitamente com "Teste" ou "Test"
+  if (/^(teste|test)\s/i.test(nameTrim)) return true;
+  if (/^(teste|test)$/i.test(nameTrim)) return true;
+
+  // Nomes que eu usei nos testes (curtos e específicos)
+  if (/^(t8[1-9]|ddd8[1-9]|premium8[1-9])$/i.test(nameTrim)) return true;
+  if (/^(hi|preco|urg|memory|hora|comercial|faq|novo|admin|premium81|caruaru2|alagoas)$/i.test(nameTrim)) return true;
+
+  return false;
+}
+
 // ── GET /admin/db/test-data-preview - Preview do que será limpo ─────────
 router.get('/db/test-data-preview', async (_req: Request, res: Response) => {
   try {
@@ -483,24 +518,15 @@ router.get('/db/test-data-preview', async (_req: Request, res: Response) => {
     const { DatabaseSync } = await import('node:sqlite');
     const db = new DatabaseSync('/app/data/conversations.db');
 
-    // Identifica mensagens de teste:
-    // - Telefones com padrão repetitivo (5581111111111, 5582222222222, etc)
-    // - Nomes começando com "Teste", "Test", "T81", "T82", "T83", "DDD"
-    // - Mensagens triviais conhecidas de teste
     const all = db.prepare(
       `SELECT id, phone, patient_name, user_message, created_at FROM conversations`
     ).all() as any[];
-
-    const testPattern = /^55\d?([0-9])\1{6,}$/; // 5581111111111, 5583333333333
-    const testNames = /^(test|t8[1-9]|ddd|hi|preco|urg|memory|maria|jo[aã]o|maria|caruaru|campina|alagoas|comercial|faq|hora|novo|premium|val|admin)/i;
 
     const testIds: number[] = [];
     const realIds: number[] = [];
 
     for (const row of all) {
-      const phone = (row.phone || '').replace(/\D/g, '');
-      const name = (row.patient_name || '').trim();
-      const isTest = testPattern.test(phone) || testNames.test(name);
+      const isTest = isTestMessage(row.phone || '', row.patient_name || '');
       if (isTest) testIds.push(row.id);
       else realIds.push(row.id);
     }
@@ -512,7 +538,7 @@ router.get('/db/test-data-preview', async (_req: Request, res: Response) => {
       to_keep: realIds.length,
       sample_to_delete: all
         .filter((r) => testIds.includes(r.id))
-        .slice(0, 20)
+        .slice(0, 30)
         .map((r) => ({
           phone: r.phone,
           name: r.patient_name,
@@ -535,17 +561,11 @@ router.post('/db/clean-test-data', async (_req: Request, res: Response) => {
       `SELECT id, phone, patient_name FROM conversations`
     ).all() as any[];
 
-    const testPattern = /^55\d?([0-9])\1{6,}$/;
-    const testNames = /^(test|t8[1-9]|ddd|hi|preco|urg|memory|maria|jo[aã]o|caruaru|campina|alagoas|comercial|faq|hora|novo|premium|val|admin)/i;
-
     const testIds: number[] = [];
     for (const row of all) {
-      const phone = (row.phone || '').replace(/\D/g, '');
-      const name = (row.patient_name || '').trim();
-      if (testPattern.test(phone) || testNames.test(name)) testIds.push(row.id);
+      if (isTestMessage(row.phone || '', row.patient_name || '')) testIds.push(row.id);
     }
 
-    // Deletar em batch
     let deleted = 0;
     if (testIds.length > 0) {
       const stmt = db.prepare('DELETE FROM conversations WHERE id = ?');
