@@ -26,6 +26,7 @@ db.exec(`
     assistant_reply  TEXT    NOT NULL,
     tokens_input     INTEGER,
     tokens_output    INTEGER,
+    is_test          INTEGER DEFAULT 0,
     created_at       DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -35,6 +36,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_conversations_created_at
     ON conversations (created_at);
 `);
+
+// Adicionar coluna is_test se ainda não existe (migration)
+try {
+  db.exec(`ALTER TABLE conversations ADD COLUMN is_test INTEGER DEFAULT 0`);
+} catch {
+  // Coluna já existe
+}
 
 logger.info(`[sqlite] Banco de dados inicializado em: ${dbPath}`);
 
@@ -90,17 +98,51 @@ export async function initPostgreSQL(): Promise<void> {
 // ── Statement preparado (SQLite) ──────────────────────────────────────────
 const insertStmt = db.prepare(`
   INSERT INTO conversations
-    (phone, patient_name, user_message, assistant_reply, tokens_input, tokens_output)
+    (phone, patient_name, user_message, assistant_reply, tokens_input, tokens_output, is_test)
   VALUES
-    (@phone, @patient_name, @user_message, @assistant_reply, @tokens_input, @tokens_output)
+    (@phone, @patient_name, @user_message, @assistant_reply, @tokens_input, @tokens_output, @is_test)
 `);
+
+/**
+ * Detecta se uma mensagem é teste (não deve contar em relatórios)
+ *
+ * Critérios CONSERVADORES:
+ * - Telefone com dígitos repetidos (55811111111, 55833333333)
+ * - Faixa 558X900000XXX (range de testes manuais)
+ * - Header X-Test-Mode no webhook
+ * - Mensagem contém marker [TEST]
+ */
+export function isTestMessage(phone: string, name: string, message: string): boolean {
+  const phoneDigits = (phone || '').replace(/\D/g, '');
+  const nameTrim = (name || '').trim();
+  const msgLower = (message || '').toLowerCase();
+
+  // Marker explícito na mensagem
+  if (msgLower.includes('[test]') || msgLower.includes('[teste]')) return true;
+
+  // Telefones com 7+ dígitos iguais em sequência
+  if (/^55(\d)\1{8,}$/.test(phoneDigits)) return true;
+  if (/^55\d(\d)\1{7,}$/.test(phoneDigits)) return true;
+
+  // Faixa 558X900000XXX (range usado em testes manuais)
+  if (/^558[1-9]900000\d{3}$/.test(phoneDigits)) return true;
+
+  // Nomes explicitamente de teste
+  if (/^(teste|test)(\s|$)/i.test(nameTrim)) return true;
+  if (/^(t8[1-9]|ddd8[1-9]|premium8[1-9]|hi|preco|urg|memory|hora|comercial|faq|novo|admin|caruaru2|alagoas)$/i.test(nameTrim)) return true;
+
+  return false;
+}
 
 /**
  * Insere um registro de conversa no banco (SQLite + PostgreSQL dual-write).
  * SQLite sempre sucede. PostgreSQL é best-effort (async, non-blocking).
+ * Mensagens detectadas como teste recebem is_test=1 e são ignoradas nos relatórios.
  */
 export function logConversation(data: ConversationLog): void {
   try {
+    const isTest = isTestMessage(data.phone, data.patient_name || '', data.user_message);
+
     // 1. SQLite (crítico - sempre salvamos localmente)
     insertStmt.run({
       '@phone': data.phone,
@@ -109,7 +151,12 @@ export function logConversation(data: ConversationLog): void {
       '@assistant_reply': data.assistant_reply,
       '@tokens_input': data.tokens_input,
       '@tokens_output': data.tokens_output,
+      '@is_test': isTest ? 1 : 0,
     } as Record<string, string | number | null>);
+
+    if (isTest) {
+      logger.info(`[sqlite] Mensagem marcada como TESTE (não conta em relatórios): ${data.phone} - ${data.patient_name}`);
+    }
 
     // 2. PostgreSQL (async, non-blocking - não bloqueia resposta)
     if (pgReady && pgPool) {

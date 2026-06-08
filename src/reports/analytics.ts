@@ -171,6 +171,7 @@ export function generateStats(startDate: Date, endDate: Date): ReportStats {
     .prepare(
       `SELECT * FROM conversations
        WHERE created_at >= ? AND created_at < ?
+         AND (is_test IS NULL OR is_test = 0)
        ORDER BY created_at ASC`
     )
     .all(startDate.toISOString(), endDate.toISOString()) as unknown as Conversation[];
@@ -185,9 +186,12 @@ export function generateStats(startDate: Date, endDate: Date): ReportStats {
   const uniquePhones = Object.keys(byPhone);
 
   // Identificar NOVOS pacientes (que nunca tiveram conversa antes do período)
+  // Ignorar mensagens marcadas como teste
   const previousPhones = new Set(
     (db
-      .prepare(`SELECT DISTINCT phone FROM conversations WHERE created_at < ?`)
+      .prepare(`SELECT DISTINCT phone FROM conversations
+                WHERE created_at < ?
+                  AND (is_test IS NULL OR is_test = 0)`)
       .all(startDate.toISOString()) as { phone: string }[]).map((r) => r.phone)
   );
 
