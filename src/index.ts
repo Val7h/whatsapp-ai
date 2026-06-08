@@ -66,6 +66,12 @@ async function bootstrap(): Promise<void> {
 
   await initMemory();
 
+  // Inicializa o scheduler de relatórios (diário/semanal/mensal)
+  if (process.env.REPORTS_ENABLED !== 'false') {
+    const { initReportScheduler } = await import('./reports/scheduler.js');
+    initReportScheduler();
+  }
+
   app.listen(PORT, () => {
     logger.info(`[server] WhatsApp AI rodando na porta ${PORT}`);
     logger.info(`[server] Environment: ${process.env.NODE_ENV || 'development'}`);

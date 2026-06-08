@@ -183,6 +183,57 @@ router.get('/test', async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /admin/report/daily/preview - Preview do relatório diário ───────
+router.get('/report/daily/preview', async (_req: Request, res: Response) => {
+  try {
+    const { generateStats } = await import('../reports/analytics.js');
+    const { formatDaily } = await import('../reports/formatters.js');
+    const now = new Date();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    const stats = generateStats(start, end);
+    const message = formatDaily(stats);
+    res.json({ stats, message });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /admin/report/daily/send - Força envio do relatório diário ─────
+router.post('/report/daily/send', async (_req: Request, res: Response) => {
+  try {
+    const { sendDailyReport } = await import('../reports/scheduler.js');
+    await sendDailyReport();
+    res.json({ success: true, message: 'Relatório diário enviado' });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /admin/report/weekly/send - Força envio do relatório semanal ───
+router.post('/report/weekly/send', async (_req: Request, res: Response) => {
+  try {
+    const { sendWeeklyReport } = await import('../reports/scheduler.js');
+    await sendWeeklyReport();
+    res.json({ success: true, message: 'Relatório semanal enviado' });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /admin/report/monthly/send - Força envio do relatório mensal ───
+router.post('/report/monthly/send', async (_req: Request, res: Response) => {
+  try {
+    const { sendMonthlyReport } = await import('../reports/scheduler.js');
+    await sendMonthlyReport();
+    res.json({ success: true, message: 'Relatório mensal enviado' });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ── POST /admin/clear-history - Limpa histórico de um número ────────────
 router.post('/clear-history', async (req: Request, res: Response) => {
   try {
