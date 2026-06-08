@@ -476,6 +476,98 @@ router.post('/report/monthly/send', async (_req: Request, res: Response) => {
   }
 });
 
+// ── GET /admin/db/test-data-preview - Preview do que será limpo ─────────
+router.get('/db/test-data-preview', async (_req: Request, res: Response) => {
+  try {
+    // @ts-ignore
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync('/app/data/conversations.db');
+
+    // Identifica mensagens de teste:
+    // - Telefones com padrão repetitivo (5581111111111, 5582222222222, etc)
+    // - Nomes começando com "Teste", "Test", "T81", "T82", "T83", "DDD"
+    // - Mensagens triviais conhecidas de teste
+    const all = db.prepare(
+      `SELECT id, phone, patient_name, user_message, created_at FROM conversations`
+    ).all() as any[];
+
+    const testPattern = /^55\d?([0-9])\1{6,}$/; // 5581111111111, 5583333333333
+    const testNames = /^(test|t8[1-9]|ddd|hi|preco|urg|memory|maria|jo[aã]o|maria|caruaru|campina|alagoas|comercial|faq|hora|novo|premium|val|admin)/i;
+
+    const testIds: number[] = [];
+    const realIds: number[] = [];
+
+    for (const row of all) {
+      const phone = (row.phone || '').replace(/\D/g, '');
+      const name = (row.patient_name || '').trim();
+      const isTest = testPattern.test(phone) || testNames.test(name);
+      if (isTest) testIds.push(row.id);
+      else realIds.push(row.id);
+    }
+
+    db.close();
+    res.json({
+      total: all.length,
+      to_delete: testIds.length,
+      to_keep: realIds.length,
+      sample_to_delete: all
+        .filter((r) => testIds.includes(r.id))
+        .slice(0, 20)
+        .map((r) => ({
+          phone: r.phone,
+          name: r.patient_name,
+          message: r.user_message?.slice(0, 60),
+        })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /admin/db/clean-test-data - Limpa dados de teste ───────────────
+router.post('/db/clean-test-data', async (_req: Request, res: Response) => {
+  try {
+    // @ts-ignore
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync('/app/data/conversations.db');
+
+    const all = db.prepare(
+      `SELECT id, phone, patient_name FROM conversations`
+    ).all() as any[];
+
+    const testPattern = /^55\d?([0-9])\1{6,}$/;
+    const testNames = /^(test|t8[1-9]|ddd|hi|preco|urg|memory|maria|jo[aã]o|caruaru|campina|alagoas|comercial|faq|hora|novo|premium|val|admin)/i;
+
+    const testIds: number[] = [];
+    for (const row of all) {
+      const phone = (row.phone || '').replace(/\D/g, '');
+      const name = (row.patient_name || '').trim();
+      if (testPattern.test(phone) || testNames.test(name)) testIds.push(row.id);
+    }
+
+    // Deletar em batch
+    let deleted = 0;
+    if (testIds.length > 0) {
+      const stmt = db.prepare('DELETE FROM conversations WHERE id = ?');
+      for (const id of testIds) {
+        stmt.run(id);
+        deleted++;
+      }
+    }
+
+    const remaining = db.prepare(`SELECT COUNT(*) as count FROM conversations`).get();
+    db.close();
+
+    logger.info(`[admin] Limpeza de testes: ${deleted} apagadas, ${(remaining as any).count} mantidas`);
+    res.json({
+      deleted,
+      remaining: (remaining as any).count,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ── POST /admin/clear-history - Limpa histórico de um número ────────────
 router.post('/clear-history', async (req: Request, res: Response) => {
   try {
