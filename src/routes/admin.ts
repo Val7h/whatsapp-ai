@@ -69,6 +69,103 @@ router.get('/evolution/instances', async (_req: Request, res: Response) => {
   }
 });
 
+// ── GET /admin/evolution/webhook/:instance - Ver webhook configurado ────
+router.get('/evolution/webhook/:instance', async (req: Request, res: Response) => {
+  try {
+    const evolutionUrl = process.env.EVOLUTION_API_URL || 'http://cto-evolution:8080';
+    const apiKey = process.env.EVOLUTION_API_KEY || '';
+    const instance = req.params.instance;
+
+    const response = await fetch(`${evolutionUrl}/webhook/find/${instance}`, {
+      headers: { apikey: apiKey },
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── POST /admin/evolution/webhook/:instance - Configurar webhook ────────
+router.post('/evolution/webhook/:instance', async (req: Request, res: Response) => {
+  try {
+    const evolutionUrl = process.env.EVOLUTION_API_URL || 'http://cto-evolution:8080';
+    const apiKey = process.env.EVOLUTION_API_KEY || '';
+    const instance = req.params.instance;
+    const { url, events } = req.body;
+
+    const response = await fetch(`${evolutionUrl}/webhook/set/${instance}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+      body: JSON.stringify({
+        webhook: {
+          enabled: true,
+          url: url || 'http://cto-whatsapp-ai:3000/webhook',
+          events: events || ['MESSAGES_UPSERT'],
+          webhook_by_events: false,
+          webhook_base64: false,
+        },
+      }),
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /admin/db/by-ddd - Estatísticas por DDD ─────────────────────────
+router.get('/db/by-ddd', async (_req: Request, res: Response) => {
+  try {
+    // @ts-ignore
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync('/app/data/conversations.db');
+
+    const all = db.prepare(`SELECT phone FROM conversations`).all() as any[];
+    const byDdd: { [key: string]: number } = {};
+
+    for (const row of all) {
+      const phone = (row.phone || '').replace(/\D/g, '');
+      let ddd = 'desconhecido';
+      if (phone.startsWith('55') && phone.length >= 12) {
+        ddd = phone.slice(2, 4);
+      } else if (phone.length >= 10) {
+        ddd = phone.slice(0, 2);
+      }
+      byDdd[ddd] = (byDdd[ddd] || 0) + 1;
+    }
+
+    // Mensagens nas últimas 24h
+    const last24h = db.prepare(
+      `SELECT phone FROM conversations WHERE created_at >= datetime('now', '-1 day')`
+    ).all() as any[];
+    const byDdd24h: { [key: string]: number } = {};
+    for (const row of last24h) {
+      const phone = (row.phone || '').replace(/\D/g, '');
+      let ddd = 'desconhecido';
+      if (phone.startsWith('55') && phone.length >= 12) {
+        ddd = phone.slice(2, 4);
+      } else if (phone.length >= 10) {
+        ddd = phone.slice(0, 2);
+      }
+      byDdd24h[ddd] = (byDdd24h[ddd] || 0) + 1;
+    }
+
+    db.close();
+    res.json({
+      total: all.length,
+      by_ddd_total: byDdd,
+      last_24h: last24h.length,
+      by_ddd_last_24h: byDdd24h,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ── GET /admin/evolution/qrcode/:instance - QR Code para conectar ───────
 router.get('/evolution/qrcode/:instance', async (req: Request, res: Response) => {
   try {
