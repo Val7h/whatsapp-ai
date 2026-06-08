@@ -117,6 +117,73 @@ router.post('/evolution/webhook/:instance', async (req: Request, res: Response) 
   }
 });
 
+// ── GET /admin/db/inspect-55 - Investiga mensagens "DDD 55" ────────────
+router.get('/db/inspect-55', async (_req: Request, res: Response) => {
+  try {
+    // @ts-ignore
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync('/app/data/conversations.db');
+
+    // Pega exemplos dos "DDD 55" para análise
+    const all = db.prepare(
+      `SELECT phone, patient_name, user_message, created_at FROM conversations
+       ORDER BY created_at DESC LIMIT 1000`
+    ).all() as any[];
+
+    const samples55: any[] = [];
+    const sampleLid: any[] = [];
+    const sampleLong: any[] = [];
+
+    for (const row of all) {
+      const phone = (row.phone || '').replace(/\D/g, '');
+      const digits = phone.length;
+
+      // Coleta amostras de DDD 55
+      if (phone.startsWith('55') && digits >= 12) {
+        const ddd = phone.slice(2, 4);
+        if (ddd === '55' && samples55.length < 10) {
+          samples55.push({
+            phone: row.phone,
+            digits,
+            patient_name: row.patient_name,
+            message: row.user_message?.slice(0, 80),
+            created_at: row.created_at,
+          });
+        }
+      }
+
+      // Coleta amostras de @lid
+      if ((row.phone || '').includes('@lid') && sampleLid.length < 10) {
+        sampleLid.push({
+          phone: row.phone,
+          patient_name: row.patient_name,
+          message: row.user_message?.slice(0, 80),
+          created_at: row.created_at,
+        });
+      }
+
+      // Telefones suspeitosamente longos
+      if (digits > 13 && sampleLong.length < 10) {
+        sampleLong.push({
+          phone: row.phone,
+          digits,
+          patient_name: row.patient_name,
+          message: row.user_message?.slice(0, 80),
+        });
+      }
+    }
+
+    db.close();
+    res.json({
+      samples_ddd_55: samples55,
+      samples_lid: sampleLid,
+      samples_long_phones: sampleLong,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ── GET /admin/db/by-ddd - Estatísticas por DDD ─────────────────────────
 router.get('/db/by-ddd', async (_req: Request, res: Response) => {
   try {
