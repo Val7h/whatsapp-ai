@@ -172,7 +172,7 @@ export function generateStats(startDate: Date, endDate: Date): ReportStats {
        WHERE created_at >= ? AND created_at < ?
        ORDER BY created_at ASC`
     )
-    .all(startDate.toISOString(), endDate.toISOString()) as Conversation[];
+    .all(startDate.toISOString(), endDate.toISOString()) as unknown as Conversation[];
 
   // Total e únicos
   const uniquePhones = new Set(conversations.map((c) => c.phone));
