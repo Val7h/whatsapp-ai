@@ -381,6 +381,68 @@ router.get('/report/daily/preview', async (_req: Request, res: Response) => {
   }
 });
 
+// ── POST /admin/evolution/test-send - Testa envio de mensagem ──────────
+router.post('/evolution/test-send', async (req: Request, res: Response) => {
+  try {
+    const evolutionUrl = process.env.EVOLUTION_API_URL || 'http://cto-evolution:8080';
+    const apiKey = process.env.EVOLUTION_API_KEY || '';
+    const instance = req.body.instance || 'cto-geral';
+    const number = req.body.number || process.env.DOCTOR_PHONE || '5583993476410';
+    const text = req.body.text || 'Teste de envio do bot - ' + new Date().toLocaleTimeString('pt-BR');
+
+    logger.info(`[admin] Testando envio: ${instance} -> ${number}`);
+    const response = await fetch(`${evolutionUrl}/message/sendText/${instance}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+      body: JSON.stringify({
+        number,
+        text,
+      }),
+    });
+
+    const status = response.status;
+    const responseText = await response.text();
+    let parsed: any = responseText;
+    try { parsed = JSON.parse(responseText); } catch {}
+
+    res.json({
+      http_status: status,
+      ok: response.ok,
+      instance,
+      number,
+      text_sent: text,
+      response: parsed,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── GET /admin/evolution/check-number - Verifica se número existe no WhatsApp
+router.get('/evolution/check-number/:instance/:number', async (req: Request, res: Response) => {
+  try {
+    const evolutionUrl = process.env.EVOLUTION_API_URL || 'http://cto-evolution:8080';
+    const apiKey = process.env.EVOLUTION_API_KEY || '';
+    const { instance, number } = req.params;
+
+    const response = await fetch(`${evolutionUrl}/chat/whatsappNumbers/${instance}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+      body: JSON.stringify({ numbers: [number] }),
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ── POST /admin/report/daily/send - Força envio do relatório diário ─────
 router.post('/report/daily/send', async (_req: Request, res: Response) => {
   try {
