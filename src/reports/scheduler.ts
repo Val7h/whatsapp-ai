@@ -9,7 +9,7 @@ import { logger } from '../services/logger.js';
 import { generateStats } from './analytics.js';
 import { formatDaily, formatWeekly, formatMonthly } from './formatters.js';
 
-const DOCTOR_PHONE = process.env.DOCTOR_PHONE || '5583993476410';
+const DOCTOR_PHONE = process.env.DOCTOR_PHONE || '92779950694580@lid';
 const INSTANCE_NAME = process.env.REPORT_INSTANCE || 'cto-geral';
 const EVOLUTION_URL = process.env.EVOLUTION_API_URL || 'http://cto-evolution:8080';
 const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY || '';
