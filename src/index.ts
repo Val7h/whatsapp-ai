@@ -5,6 +5,7 @@ import { initMemory } from './services/memory.js';
 import { logger } from './services/logger.js';
 import webhookRouter from './routes/webhook.js';
 import healthRouter from './routes/health.js';
+import adminRouter from './routes/admin.js';
 import preConsultaRouter from './pre-consulta/routes.js';
 
 // Inicializa banco SQLite (efeito colateral do import)
@@ -32,6 +33,7 @@ app.use((req, _res, next) => {
 // ── Rotas ─────────────────────────────────────────────────────────────────
 app.use('/health', healthRouter);
 app.use('/webhook', webhookRouter);
+app.use('/admin', adminRouter);
 app.use('/', preConsultaRouter);
 
 // Rota raiz para confirmação rápida
