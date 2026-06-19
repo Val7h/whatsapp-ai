@@ -8,12 +8,18 @@ const MAX_MESSAGES = MAX_TURNS * 2; // cada turno = 1 user + 1 assistant
 const REDIS_TTL_SECONDS = 48 * 60 * 60; // 48 horas
 const KEY_PREFIX = 'whatsapp_history:';
 
+// Idempotência: guarda a resposta já enviada por message-id (dedupe de reentregas)
+const IDEMPOTENCY_PREFIX = 'whatsapp_msgid:';
+const IDEMPOTENCY_TTL_SECONDS = 10 * 60; // 10 minutos
+
 // ── Estado ────────────────────────────────────────────────────────────────
 let redisClient: Redis | null = null;
 let usingRedis = false;
 
 // Fallback em memória
 const memoryStore = new Map<string, Message[]>();
+// Fallback em memória para idempotência (id → { reply, exp })
+const idemStore = new Map<string, { reply: string; exp: number }>();
 
 // ── Indicador público do modo ativo ──────────────────────────────────────
 export function getMemoryMode(): 'connected' | 'in-memory' {
@@ -115,6 +121,43 @@ export async function appendToHistory(
   } else {
     memoryStore.set(phone, trimmed);
   }
+}
+
+/**
+ * Idempotência — retorna a resposta já processada para um message-id, ou null.
+ * Usado para deduplicar reentregas do n8n/Evolution (retry em timeout).
+ */
+export async function getProcessedReply(messageId: string): Promise<string | null> {
+  if (usingRedis && redisClient) {
+    try {
+      return await redisClient.get(`${IDEMPOTENCY_PREFIX}${messageId}`);
+    } catch (err) {
+      logger.error(`[memory] Erro ao ler idempotência: ${String(err)}`);
+      return null;
+    }
+  }
+  const entry = idemStore.get(messageId);
+  if (!entry) return null;
+  if (Date.now() > entry.exp) {
+    idemStore.delete(messageId);
+    return null;
+  }
+  return entry.reply;
+}
+
+/**
+ * Idempotência — registra a resposta enviada para um message-id (TTL curto).
+ */
+export async function setProcessedReply(messageId: string, reply: string): Promise<void> {
+  if (usingRedis && redisClient) {
+    try {
+      await redisClient.set(`${IDEMPOTENCY_PREFIX}${messageId}`, reply, 'EX', IDEMPOTENCY_TTL_SECONDS);
+    } catch (err) {
+      logger.error(`[memory] Erro ao gravar idempotência: ${String(err)}`);
+    }
+    return;
+  }
+  idemStore.set(messageId, { reply, exp: Date.now() + IDEMPOTENCY_TTL_SECONDS * 1000 });
 }
 
 /**

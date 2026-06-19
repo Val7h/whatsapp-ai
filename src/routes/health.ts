@@ -10,7 +10,7 @@ router.get('/', (_req: Request, res: Response) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     redis: getMemoryMode(),
-    model: process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-20250514',
+    model: process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6',
   };
 
   res.json(payload);

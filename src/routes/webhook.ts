@@ -1,6 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { getHistory, appendToHistory, clearHistory } from '../services/memory.js';
+import {
+  getHistory,
+  appendToHistory,
+  clearHistory,
+  getProcessedReply,
+  setProcessedReply,
+} from '../services/memory.js';
 import { askClaude } from '../services/claude.js';
 import { logConversation } from '../db/sqlite.js';
 import { logger } from '../services/logger.js';
@@ -10,6 +16,7 @@ import { getSystemPrompt } from '../prompts/system.js';
 import { buildHolidayContext } from '../services/holidays.js';
 import { buildScheduleContext } from '../services/schedule.js';
 import { CLINIC_TZ } from '../services/clock.js';
+import { withLock } from '../services/lock.js';
 
 // ── Carregar agentes em runtime
 const { pm, AGENTS } = loadAgents();
@@ -22,6 +29,7 @@ const WebhookSchema = z.object({
   name: z.string().min(1).max(100).optional().default('Paciente'),
   message: z.string().min(1).max(4000),
   instance: z.string().optional(), // cto-caruaru | cto-campina | cto-geral
+  messageId: z.string().min(1).max(128).optional(), // id da mensagem (dedupe de reentregas)
 });
 
 // ── Rate limiting por telefone (máx. 10 msg/minuto) ───────────────────────
@@ -113,6 +121,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   let { phone, name, message, instance } = parsed.data;
+  const { messageId } = parsed.data;
 
   // ── Inferir instance do DDD se não fornecido ────────────────────────────
   if (!instance) {
@@ -159,9 +168,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     logger.info(`[pm-coordinator] Usando agente: ${agent.name} (confiança: ${(detection.confidence * 100).toFixed(0)}%)`);
   }
 
-  // 6. Buscar histórico
-  const history = await getHistory(phone);
-
   // 7. Injetar contexto de data/hora e DDD no prompt (sempre no fuso da clínica)
   const now = new Date();
   const dayOfWeek = now.toLocaleDateString('pt-BR', { weekday: 'long', timeZone: CLINIC_TZ });
@@ -195,42 +201,61 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     .filter(Boolean)
     .join('\n\n');
 
-  // 8. Chamar Claude com o prompt do agente especializado
-  // Claude.askClaude() detecta se é prompt customizado (>200 chars ou contém "AGENTE")
-  const { reply: rawReply, tokens_input, tokens_output } = await askClaude(
-    history,
-    message,
-    enhancedPrompt, // ← Prompt customizado + contexto de data/hora
-    instance
-  );
+  // 8. Processamento serializado por telefone (evita corrida no histórico) +
+  //    idempotência por message-id (deduplica reentregas do n8n/Evolution).
+  try {
+    const reply = await withLock(phone, async (): Promise<string> => {
+      // Dedupe: se este message-id já foi processado, devolve a mesma resposta.
+      if (messageId) {
+        const cached = await getProcessedReply(messageId);
+        if (cached !== null) {
+          logger.info(`[webhook] Idempotência: message-id ${messageId} já processado — reusando resposta`);
+          return cached;
+        }
+      }
 
-  // 8. ── PM COORDINATOR: Validar resposta ────────────────────────────────
-  const validation = pm.validateResponse(rawReply, detection.type);
-  if (!validation.ok) {
-    logger.warn(`[pm-coordinator] Validação falhou para ${detection.type}: ${validation.issues.join(', ')}`);
+      const history = await getHistory(phone);
+
+      // Chamar Claude com o prompt do agente especializado (já tem fallback interno)
+      const { reply: rawReply, tokens_input, tokens_output } = await askClaude(
+        history,
+        message,
+        enhancedPrompt,
+        instance,
+      );
+
+      // ── PM COORDINATOR: Validar resposta ──────────────────────────────────
+      const validation = pm.validateResponse(rawReply, detection.type);
+      if (!validation.ok) {
+        logger.warn(`[pm-coordinator] Validação falhou para ${detection.type}: ${validation.issues.join(', ')}`);
+      }
+      const finalReply = validation.ok ? rawReply : pm.adjustResponse(rawReply, validation.issues);
+
+      // Salvar histórico + idempotência + log (dentro do lock)
+      await appendToHistory(phone, message, finalReply);
+      if (messageId) await setProcessedReply(messageId, finalReply);
+
+      logConversation({
+        phone,
+        patient_name: name,
+        user_message: message,
+        assistant_reply: finalReply,
+        tokens_input,
+        tokens_output,
+      });
+
+      logger.info(
+        `[webhook] Resposta enviada para ${phone} — tokens: ${tokens_input}in / ${tokens_output}out`,
+      );
+      return finalReply;
+    });
+
+    const response: WebhookResponse = { reply };
+    res.json(response);
+  } catch (err) {
+    logger.error(`[webhook] Erro ao processar mensagem de ${phone}: ${String(err)}`);
+    res.status(500).json({ error: 'Erro interno ao processar a mensagem' });
   }
-
-  const reply = validation.ok ? rawReply : pm.adjustResponse(rawReply, validation.issues);
-
-  // 8. Salvar histórico + log
-  await appendToHistory(phone, message, reply);
-
-  logConversation({
-    phone,
-    patient_name: name,
-    user_message: message,
-    assistant_reply: reply,
-    tokens_input,
-    tokens_output,
-  });
-
-  logger.info(
-    `[webhook] Resposta enviada para ${phone} — tokens: ${tokens_input}in / ${tokens_output}out`,
-  );
-
-  // 9. Retornar resposta
-  const response: WebhookResponse = { reply };
-  res.json(response);
 });
 
 // ─────────────────────────────────────────────────────────────────────────
