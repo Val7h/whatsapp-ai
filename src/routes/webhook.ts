@@ -7,6 +7,7 @@ import { logger } from '../services/logger.js';
 import { RateLimitMap, WebhookResponse } from '../types.js';
 import { loadAgents } from '../agents/loader.js';
 import { getSystemPrompt } from '../prompts/system.js';
+import { buildHolidayContext } from '../services/holidays.js';
 
 // ── Carregar agentes em runtime
 const { pm, AGENTS } = loadAgents();
@@ -177,7 +178,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const contextMessage = `[CONTEXTO ATUAL: ${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}, ${dateStr}, ${timeStr}]${locationHint}`;
-  const enhancedPrompt = `${agentPrompt}\n\n${contextMessage}`;
+
+  // Bloco de feriados (nacionais/estaduais/municipais) dos próximos 60 dias
+  const holidayContext = buildHolidayContext(now);
+  const enhancedPrompt = holidayContext
+    ? `${agentPrompt}\n\n${contextMessage}\n\n${holidayContext}`
+    : `${agentPrompt}\n\n${contextMessage}`;
 
   // 8. Chamar Claude com o prompt do agente especializado
   // Claude.askClaude() detecta se é prompt customizado (>200 chars ou contém "AGENTE")
