@@ -8,10 +8,10 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
-    "test": "npm run build && mocha dist/agents/test-multi-agent.js dist/services/holidays.test.js dist/services/schedule.test.js dist/services/lock.test.js dist/services/idempotency.test.js"
+    "test": "npm run build && mocha dist/agents/test-multi-agent.js dist/services/holidays.test.js dist/services/schedule.test.js dist/services/lock.test.js dist/services/idempotency.test.js dist/services/whatsapp-format.test.js dist/services/phone.test.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0",
+    "@anthropic-ai/sdk": "^0.105.0",
     "@types/multer": "^2.1.0",
     "@types/pdfkit": "^0.17.6",
     "dotenv": "^16.4.5",

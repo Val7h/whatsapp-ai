@@ -17,6 +17,11 @@ import { buildHolidayContext } from '../services/holidays.js';
 import { buildScheduleContext } from '../services/schedule.js';
 import { CLINIC_TZ } from '../services/clock.js';
 import { withLock } from '../services/lock.js';
+import { toWhatsApp } from '../services/whatsapp-format.js';
+import { extractDDD, maskPhone } from '../services/phone.js';
+
+// Janela (em dias) de feriados injetada no prompt — configurável via env.
+const HOLIDAY_WINDOW_DAYS = parseInt(process.env.HOLIDAY_WINDOW_DAYS ?? '21', 10);
 
 // ── Carregar agentes em runtime
 const { pm, AGENTS } = loadAgents();
@@ -71,13 +76,8 @@ function isAllowedPhone(phone: string): boolean {
 
 // ── Detecção de DDD e Instance ────────────────────────────────────────────
 function inferInstanceFromDDD(phone: string): string {
-  // Extrai DDD corretamente: remove non-digits, pula +55, pega primeiros 2 dígitos
-  let numeros = phone.replace(/\D/g, '');
-  // Se começa com 55 (código Brasil), pular e pegar os próximos 2 (DDD)
-  if (numeros.startsWith('55')) {
-    numeros = numeros.slice(2);
-  }
-  const ddd = numeros.slice(0, 2);
+  // Usa a extração robusta de phone.ts (lida com 55, 9º dígito, @lid, etc.)
+  const ddd = extractDDD(phone);
 
   const dddMapping: { [key: string]: string } = {
     '81': 'ddd-81-choice',    // Pernambuco (Caruaru OU Palmares) - prompt específico
@@ -95,7 +95,11 @@ function inferInstanceFromDDD(phone: string): string {
 // ── Validação do Webhook Secret ───────────────────────────────────────────
 function validateSecret(req: Request): boolean {
   const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) return true; // sem segredo configurado, permite tudo
+  // Fail-closed: sem segredo configurado, RECUSA (não deixa o webhook aberto).
+  if (!secret) {
+    logger.error('[webhook] WEBHOOK_SECRET não configurado — recusando requisição. Defina WEBHOOK_SECRET no ambiente.');
+    return false;
+  }
 
   const headerSecret = req.headers['x-webhook-secret'];
   return headerSecret === secret;
@@ -131,23 +135,24 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   // 3. Whitelist
   if (!isAllowedPhone(phone)) {
-    logger.warn(`[webhook] Número não permitido: ${phone}`);
+    logger.warn(`[webhook] Número não permitido: ${maskPhone(phone)}`);
     res.status(403).json({ error: 'Número não autorizado' });
     return;
   }
 
   // 4. Rate limiting
   if (isRateLimited(phone)) {
-    logger.warn(`[webhook] Rate limit atingido para: ${phone}`);
+    logger.warn(`[webhook] Rate limit atingido para: ${maskPhone(phone)}`);
     res.status(429).json({ error: 'Muitas mensagens. Aguarde um momento.' });
     return;
   }
 
-  logger.info(`[webhook] Mensagem recebida de ${phone} (${name}) [${instance}]: "${message.slice(0, 60)}..."`);
+  // LGPD: não logamos o conteúdo da mensagem (sintomas) nem o telefone completo.
+  logger.info(`[webhook] Mensagem recebida de ${maskPhone(phone)} [${instance}] — ${message.length} chars`);
 
   // 5. ── PM COORDINATOR: Detectar tipo de problema ────────────────────────
   const detection = pm.detectProblemType(message);
-  pm.logRouting(phone, message, detection);
+  pm.logRouting(maskPhone(phone), message, detection);
 
   // Buscar agente especializado
   const agent = AGENTS[detection.type];
@@ -174,8 +179,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const dateStr = now.toLocaleDateString('pt-BR', { timeZone: CLINIC_TZ });
   const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: CLINIC_TZ });
 
-  // Extrair DDD do telefone
-  const ddd = phone.replace(/\D/g, '').slice(-10, -8);
+  // Extrair DDD do telefone (mesma função robusta usada no roteamento)
+  const ddd = extractDDD(phone);
   let locationHint = '';
   if (ddd === '81') {
     locationHint = '\n[DICA: Este cliente é de DDD 81 (Pernambuco). Ofereça Caruaru OU Palmares, não Campina Grande.]';
@@ -187,17 +192,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const contextMessage = `[CONTEXTO ATUAL: ${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}, ${dateStr}, ${timeStr}]${locationHint}`;
 
-  // Blocos de contexto temporal: horário de atendimento (agora) + feriados (60d).
+  // Blocos de contexto temporal: horário de atendimento (agora) + feriados.
   // Degradam para vazio em caso de erro — nunca derrubam a resposta ao paciente.
   let scheduleContext = '';
   let holidayContext = '';
   try {
     scheduleContext = buildScheduleContext(now);
-    holidayContext = buildHolidayContext(now);
+    holidayContext = buildHolidayContext(now, HOLIDAY_WINDOW_DAYS);
   } catch (err) {
     logger.warn(`[webhook] Falha ao montar contexto temporal: ${String(err)}`);
   }
-  const enhancedPrompt = [agentPrompt, contextMessage, scheduleContext, holidayContext]
+  // Contexto volátil (muda a cada minuto) — vai SEPARADO do prompt estável para
+  // não invalidar o prompt caching da Anthropic.
+  const volatileContext = [contextMessage, scheduleContext, holidayContext]
     .filter(Boolean)
     .join('\n\n');
 
@@ -220,8 +227,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       const { reply: rawReply, tokens_input, tokens_output } = await askClaude(
         history,
         message,
-        enhancedPrompt,
-        instance,
+        agentPrompt, // prompt estável (cacheável)
+        volatileContext, // data/hora/horário/feriados (sem cache)
       );
 
       // ── PM COORDINATOR: Validar resposta ──────────────────────────────────
@@ -229,7 +236,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       if (!validation.ok) {
         logger.warn(`[pm-coordinator] Validação falhou para ${detection.type}: ${validation.issues.join(', ')}`);
       }
-      const finalReply = validation.ok ? rawReply : pm.adjustResponse(rawReply, validation.issues);
+      const adjusted = validation.ok ? rawReply : pm.adjustResponse(rawReply, validation.issues);
+      // Converte Markdown do Claude para o formato do WhatsApp (*negrito*, • listas)
+      const finalReply = toWhatsApp(adjusted);
 
       // Salvar histórico + idempotência + log (dentro do lock)
       await appendToHistory(phone, message, finalReply);
@@ -245,7 +254,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       });
 
       logger.info(
-        `[webhook] Resposta enviada para ${phone} — tokens: ${tokens_input}in / ${tokens_output}out`,
+        `[webhook] Resposta enviada para ${maskPhone(phone)} — tokens: ${tokens_input}in / ${tokens_output}out`,
       );
       return finalReply;
     });
@@ -253,7 +262,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const response: WebhookResponse = { reply };
     res.json(response);
   } catch (err) {
-    logger.error(`[webhook] Erro ao processar mensagem de ${phone}: ${String(err)}`);
+    logger.error(`[webhook] Erro ao processar mensagem de ${maskPhone(phone)}: ${String(err)}`);
     res.status(500).json({ error: 'Erro interno ao processar a mensagem' });
   }
 });
@@ -270,7 +279,7 @@ router.post('/clear/:phone', async (req: Request, res: Response): Promise<void> 
   const { phone } = req.params;
   await clearHistory(phone);
 
-  logger.info(`[webhook] Histórico limpo manualmente para ${phone}`);
+  logger.info(`[webhook] Histórico limpo manualmente para ${maskPhone(phone)}`);
   res.json({ success: true, message: `Histórico de ${phone} removido.` });
 });
 
