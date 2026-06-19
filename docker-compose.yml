@@ -27,6 +27,8 @@ services:
     environment:
       # Sobrescreve REDIS_URL para apontar ao container redis
       REDIS_URL: redis://redis:6379
+      # Fuso da clínica (GMT-3) — necessário p/ horário de atendimento e feriados
+      TZ: America/Recife
     volumes:
       - whatsapp_data:/app/data
       - whatsapp_logs:/app/logs

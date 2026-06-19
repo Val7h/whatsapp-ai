@@ -14,6 +14,8 @@
  *    este arquivo é a única fonte de verdade dos feriados do assistente.
  */
 
+import { wallClock, weekdayOfISO, addDaysISO, weekdayName } from './clock.js';
+
 export type UF = 'PB' | 'PE';
 export type Scope = 'nacional' | 'estadual' | 'municipal';
 
@@ -52,12 +54,14 @@ const STATE_FIXED: Record<UF, Array<{ md: string; name: string }>> = {
   PE: [{ md: '03-06', name: 'Data Magna de Pernambuco (Revolução de 1817)' }],
 };
 
-// ── Feriados municipais fixos (MM-DD) por cidade ────────────────────────────
+// ── Feriados municipais fixos (MM-DD) por cidade — CONFIRMADOS ──────────────
+// Apenas datas confirmadas entram aqui (são injetadas no prompt como "sem
+// atendimento" e fecham a unidade na grade). Datas a confirmar ficam em
+// MUNICIPAL_PENDING abaixo e NÃO afetam o assistente até serem validadas.
 const MUNICIPAL_FIXED: Record<string, Array<{ md: string; name: string }>> = {
   'Campina Grande': [
     { md: '06-24', name: 'São João' },
     { md: '10-11', name: 'Emancipação Política de Campina Grande' },
-    { md: '12-08', name: 'Nossa Senhora da Conceição (padroeira) (confirmar)' },
   ],
   'Caruaru': [
     { md: '05-18', name: 'Emancipação Política de Caruaru' },
@@ -66,8 +70,17 @@ const MUNICIPAL_FIXED: Record<string, Array<{ md: string; name: string }>> = {
   ],
   'Palmares': [
     { md: '06-24', name: 'São João' },
-    { md: '08-13', name: 'Emancipação Política de Palmares (confirmar)' },
-    { md: '10-07', name: 'Nossa Senhora do Rosário (padroeira) (confirmar)' },
+  ],
+};
+
+// ⚠️ A CONFIRMAR com cada prefeitura. NÃO usados pelo assistente (não entram no
+// prompt nem fecham unidade) para não negar agendamento em dia possivelmente
+// útil. Mova para MUNICIPAL_FIXED após validar a data oficial.
+export const MUNICIPAL_PENDING: Record<string, Array<{ md: string; name: string }>> = {
+  'Campina Grande': [{ md: '12-08', name: 'Nossa Senhora da Conceição (padroeira)' }],
+  'Palmares': [
+    { md: '08-13', name: 'Emancipação Política de Palmares' },
+    { md: '10-07', name: 'Nossa Senhora do Rosário (padroeira)' },
   ],
 };
 
@@ -150,9 +163,10 @@ export function holidaysForYear(year: number): Holiday[] {
  * Lista os feriados num intervalo [from, from+days], cobrindo virada de ano.
  */
 export function getUpcomingHolidays(from: Date, days = 60): Holiday[] {
-  const fromISO = toISO(from);
-  const toISODate = toISO(addDays(from, days));
-  const years = new Set([from.getUTCFullYear(), addDays(from, days).getUTCFullYear()]);
+  // Ancora "hoje" no fuso da clínica (não no UTC do processo).
+  const fromISO = wallClock(from).iso;
+  const toISODate = addDaysISO(fromISO, days);
+  const years = new Set([Number(fromISO.slice(0, 4)), Number(toISODate.slice(0, 4))]);
 
   const all: Holiday[] = [];
   years.forEach((y) => all.push(...holidaysForYear(y)));
@@ -183,8 +197,6 @@ export function isHoliday(date: Date, city?: string): Holiday | null {
   return isHolidayOn(toISO(date), city);
 }
 
-const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-
 /**
  * Monta o bloco de contexto de feriados para injetar no prompt do assistente.
  * Retorna '' quando não há feriados na janela (evita poluir o prompt).
@@ -194,8 +206,8 @@ export function buildHolidayContext(today: Date, days = 60): string {
   if (upcoming.length === 0) return '';
 
   const lines = upcoming.map((h) => {
-    const [y, m, d] = h.date.split('-').map(Number);
-    const dow = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+    const [, m, d] = h.date.split('-').map(Number);
+    const dow = weekdayName(weekdayOfISO(h.date));
     const where = h.cities.length === ALL_CITIES.length ? 'todas as unidades' : h.cities.join(', ');
     return `• ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')} (${dow}) — ${h.name} [${h.scope}] → SEM atendimento em: ${where}`;
   });

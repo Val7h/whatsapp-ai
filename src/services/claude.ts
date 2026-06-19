@@ -8,7 +8,7 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const MODEL = process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-20250514';
+const MODEL = process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-6';
 const MAX_TOKENS = 1024;
 
 const FALLBACK_REPLY =
@@ -64,8 +64,12 @@ export async function askClaude(
     const tokens_output = response.usage.output_tokens;
 
     logger.info(
-      `[claude] Tokens usados — input: ${tokens_input}, output: ${tokens_output}`,
+      `[claude] Modelo: ${response.model} — tokens input: ${tokens_input}, output: ${tokens_output}, stop: ${response.stop_reason}`,
     );
+
+    if (response.stop_reason === 'max_tokens') {
+      logger.warn(`[claude] Resposta truncada por max_tokens (${MAX_TOKENS})`);
+    }
 
     // Extrai o texto da resposta
     const firstBlock = response.content[0];

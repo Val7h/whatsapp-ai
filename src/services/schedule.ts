@@ -3,6 +3,9 @@
  * "está aberto agora?" e próximo atendimento. Integra com feriados
  * (data de feriado da cidade = unidade fechada, mesmo no dia normal de grade).
  *
+ * Toda a leitura de dia/hora é feita no fuso da clínica (clock.ts), de modo que
+ * o resultado independe do TZ do processo (UTC no container, p. ex.).
+ *
  * Grade canônica (atendimento apenas seg–qui; sex/sáb/dom sem atendimento):
  *   Seg: CTO (Campina Grande, 08–12) | Intensiva Day (Caruaru, 17–21)
  *   Ter: Clínica Mário Bento (Palmares, 10–15)
@@ -13,6 +16,7 @@
  */
 
 import { isHolidayOn } from './holidays.js';
+import { wallClock, weekdayOfISO, addDaysISO, weekdayName } from './clock.js';
 
 export type SlotType = 'ordem de chegada' | 'agendado';
 
@@ -43,31 +47,33 @@ export const SCHEDULE: Record<number, Slot[]> = {
   ],
 };
 
-const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
-
-// ── Helpers de tempo (sempre em horário "de parede" / local) ────────────────
+// ── Helpers de tempo ────────────────────────────────────────────────────────
 const toMin = (hhmm: string): number => {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
 };
-const localISO = (d: Date): string =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const fmt = (hhmm: string): string => hhmm.replace(':', 'h').replace('h00', 'h');
+
+/** Slots de um dia (por ISO + weekday), removendo unidades fechadas por feriado. */
+function slotsForISO(iso: string, weekday: number): Slot[] {
+  return (SCHEDULE[weekday] ?? []).filter((s) => !isHolidayOn(iso, s.city));
+}
 
 /**
  * Slots de atendimento de um dia, já removendo unidades fechadas por feriado.
  */
 export function slotsForDay(date: Date): Slot[] {
-  const iso = localISO(date);
-  return (SCHEDULE[date.getDay()] ?? []).filter((s) => !isHolidayOn(iso, s.city));
+  const w = wallClock(date);
+  return slotsForISO(w.iso, w.weekday);
 }
 
 /**
  * Slots abertos exatamente no instante `date` (dia + hora), respeitando feriados.
  */
 export function openSlotsAt(date: Date): Slot[] {
-  const nowMin = date.getHours() * 60 + date.getMinutes();
-  return slotsForDay(date).filter((s) => toMin(s.start) <= nowMin && nowMin < toMin(s.end));
+  const w = wallClock(date);
+  const nowMin = w.hour * 60 + w.minute;
+  return slotsForISO(w.iso, w.weekday).filter((s) => toMin(s.start) <= nowMin && nowMin < toMin(s.end));
 }
 
 /** Conveniência: há alguma unidade aberta neste instante? */
@@ -77,17 +83,19 @@ export function isOpenNow(date: Date): boolean {
 
 /**
  * Próximo atendimento a partir de `date` (varre até 14 dias), opcionalmente
- * filtrando por cidade. Retorna o slot mais cedo e a data correspondente.
+ * filtrando por cidade. Retorna o slot mais cedo e a data (meio-dia UTC do dia).
  */
-export function nextOpening(date: Date, city?: string): { date: Date; slot: Slot } | null {
-  const nowMin = date.getHours() * 60 + date.getMinutes();
+export function nextOpening(date: Date, city?: string): { date: Date; weekday: number; slot: Slot } | null {
+  const w = wallClock(date);
+  const nowMin = w.hour * 60 + w.minute;
   for (let i = 0; i < 14; i++) {
-    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate() + i);
-    const slots = slotsForDay(day)
+    const iso = addDaysISO(w.iso, i);
+    const weekday = weekdayOfISO(iso);
+    const slots = slotsForISO(iso, weekday)
       .filter((s) => !city || s.city === city)
       .filter((s) => i > 0 || toMin(s.start) > nowMin) // hoje: só slots que ainda vão começar
       .sort((a, b) => toMin(a.start) - toMin(b.start));
-    if (slots.length > 0) return { date: day, slot: slots[0] };
+    if (slots.length > 0) return { date: new Date(`${iso}T12:00:00Z`), weekday, slot: slots[0] };
   }
   return null;
 }
@@ -97,12 +105,12 @@ export function nextOpening(date: Date, city?: string): { date: Date; slot: Slot
  * (aberto/fechado), a grade do dia e o próximo atendimento quando fechado.
  */
 export function buildScheduleContext(now: Date): string {
-  const dow = WEEKDAYS[now.getDay()];
-  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const today = slotsForDay(now);
+  const w = wallClock(now);
+  const hhmm = `${String(w.hour).padStart(2, '0')}:${String(w.minute).padStart(2, '0')}`;
+  const today = slotsForISO(w.iso, w.weekday);
   const openNow = openSlotsAt(now);
 
-  const lines: string[] = [`[HORÁRIO — agora é ${dow} ${hhmm}.]`];
+  const lines: string[] = [`[HORÁRIO — agora é ${weekdayName(w.weekday)} ${hhmm}.]`];
 
   if (today.length === 0) {
     lines.push('Hoje NÃO há atendimento em nenhuma unidade.');
@@ -119,9 +127,8 @@ export function buildScheduleContext(now: Date): string {
   if (openNow.length === 0) {
     const next = nextOpening(now);
     if (next) {
-      const nd = WEEKDAYS[next.date.getDay()];
       lines.push(
-        `Próximo atendimento: ${nd} ${fmt(next.slot.start)} — ${next.slot.clinic} (${next.slot.city}).`,
+        `Próximo atendimento: ${weekdayName(next.weekday)} ${fmt(next.slot.start)} — ${next.slot.clinic} (${next.slot.city}).`,
       );
     }
     lines.push('NÃO oriente o paciente a comparecer fora do horário de atendimento.');

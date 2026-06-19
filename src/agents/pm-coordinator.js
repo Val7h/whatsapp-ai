@@ -26,11 +26,13 @@ const PROBLEM_TYPES = {
 const KEYWORDS = {
     [PROBLEM_TYPES.URGENCIA]: {
         keywords: [
-            'urgência', 'urgente', 'pronto-socorro', 'ps', 'samu',
-            'fratura suspeita', 'luxação', 'trauma agudo', 'acidente',
-            'dor intensa', 'febre alta', 'formigamento', 'perda de força',
-            'caiu', 'acidente', 'pancada', 'não consigo andar', 'não consigo mexer',
-            'sangue', 'hemorragia', 'inconsciente', 'desmaio',
+            'urgência', 'urgente', 'pronto-socorro', 'pronto socorro', 'samu',
+            'fratura', 'fraturei', 'fraturou', 'fratura suspeita', 'quebrei', 'quebrou',
+            'luxação', 'luxei', 'desloquei', 'deslocou', 'saiu do lugar', 'torci',
+            'trauma agudo', 'acidente', 'atropel', 'caí', 'caiu', 'queda', 'pancada',
+            'dor intensa', 'dor muito forte', 'febre alta',
+            'formigamento', 'perda de força', 'não consigo andar', 'não consigo mexer',
+            'sangue', 'sangramento', 'sangrando', 'hemorragia', 'inconsciente', 'desmaio', 'desmaiou',
         ],
         confidence: 0.9, // Alta confiança
     },
@@ -174,9 +176,11 @@ function validateResponse(reply, problemType, context = {}) {
 
     // ── Validações específicas por tipo ────────────────────────────────────
     if (problemType === PROBLEM_TYPES.URGENCIA) {
-        // Em urgência, DEVE indicar PS ou SAMU de forma explícita
-        const urgencyPhrases = ['pronto-socorro', 'ps', 'samu', 'emergência', 'ir ao hospital agora'];
-        const hasUrgency = urgencyPhrases.some(p => reply.toLowerCase().includes(p));
+        // Em urgência, DEVE indicar PS ou SAMU de forma explícita.
+        // "ps" só conta como palavra isolada (evita casar "depois", "psicólogo" etc.)
+        const lower = reply.toLowerCase();
+        const urgencyPhrases = ['pronto-socorro', 'pronto socorro', 'samu', 'emergência', 'ir ao hospital agora'];
+        const hasUrgency = urgencyPhrases.some(p => lower.includes(p)) || /\bps\b/.test(lower);
         if (!hasUrgency && !context.isMedicalProfessional) {
             issues.push('Resposta de urgência não menciona PS/SAMU adequadamente');
         }

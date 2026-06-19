@@ -9,6 +9,7 @@ import { loadAgents } from '../agents/loader.js';
 import { getSystemPrompt } from '../prompts/system.js';
 import { buildHolidayContext } from '../services/holidays.js';
 import { buildScheduleContext } from '../services/schedule.js';
+import { CLINIC_TZ } from '../services/clock.js';
 
 // ── Carregar agentes em runtime
 const { pm, AGENTS } = loadAgents();
@@ -161,11 +162,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // 6. Buscar histórico
   const history = await getHistory(phone);
 
-  // 7. Injetar contexto de data/hora e DDD no prompt
+  // 7. Injetar contexto de data/hora e DDD no prompt (sempre no fuso da clínica)
   const now = new Date();
-  const dayOfWeek = now.toLocaleDateString('pt-BR', { weekday: 'long' });
-  const dateStr = now.toLocaleDateString('pt-BR');
-  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const dayOfWeek = now.toLocaleDateString('pt-BR', { weekday: 'long', timeZone: CLINIC_TZ });
+  const dateStr = now.toLocaleDateString('pt-BR', { timeZone: CLINIC_TZ });
+  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: CLINIC_TZ });
 
   // Extrair DDD do telefone
   const ddd = phone.replace(/\D/g, '').slice(-10, -8);
@@ -180,9 +181,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   const contextMessage = `[CONTEXTO ATUAL: ${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}, ${dateStr}, ${timeStr}]${locationHint}`;
 
-  // Blocos de contexto temporal: horário de atendimento (agora) + feriados (60d)
-  const scheduleContext = buildScheduleContext(now);
-  const holidayContext = buildHolidayContext(now);
+  // Blocos de contexto temporal: horário de atendimento (agora) + feriados (60d).
+  // Degradam para vazio em caso de erro — nunca derrubam a resposta ao paciente.
+  let scheduleContext = '';
+  let holidayContext = '';
+  try {
+    scheduleContext = buildScheduleContext(now);
+    holidayContext = buildHolidayContext(now);
+  } catch (err) {
+    logger.warn(`[webhook] Falha ao montar contexto temporal: ${String(err)}`);
+  }
   const enhancedPrompt = [agentPrompt, contextMessage, scheduleContext, holidayContext]
     .filter(Boolean)
     .join('\n\n');
