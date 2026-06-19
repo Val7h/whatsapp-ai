@@ -163,15 +163,24 @@ export function getUpcomingHolidays(from: Date, days = 60): Holiday[] {
 }
 
 /**
+ * Verifica se uma data (string ISO 'YYYY-MM-DD') é feriado. Se `city` for
+ * informada, considera apenas os feriados que afetam aquela unidade.
+ * Útil para cruzar com horário sem conversões de fuso horário.
+ */
+export function isHolidayOn(iso: string, city?: string): Holiday | null {
+  const year = Number(iso.slice(0, 4));
+  const found = holidaysForYear(year).find((h) => h.date === iso);
+  if (!found) return null;
+  if (city && !found.cities.includes(city)) return null;
+  return found;
+}
+
+/**
  * Verifica se uma data é feriado. Se `city` for informada, considera apenas os
  * feriados que afetam aquela unidade; caso contrário, qualquer feriado.
  */
 export function isHoliday(date: Date, city?: string): Holiday | null {
-  const iso = toISO(date);
-  const found = holidaysForYear(date.getUTCFullYear()).find((h) => h.date === iso);
-  if (!found) return null;
-  if (city && !found.cities.includes(city)) return null;
-  return found;
+  return isHolidayOn(toISO(date), city);
 }
 
 const WEEKDAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
