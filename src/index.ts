@@ -45,6 +45,23 @@ app.get('/', (_req, res) => {
   });
 });
 
+// Disparo manual do brief do Chief of Staff (teste). Protegido pelo COS_BRIEF_TOKEN.
+app.post('/brief/test', async (req, res) => {
+  const token = process.env.COS_BRIEF_TOKEN || '';
+  const sent = (req.header('X-Brief-Token') || req.query.token || '') as string;
+  if (!token || sent !== token) {
+    res.status(401).json({ error: 'token inválido' });
+    return;
+  }
+  try {
+    const { sendChiefOfStaffBrief } = await import('./reports/scheduler.js');
+    await sendChiefOfStaffBrief();
+    res.json({ ok: true, disparado: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, erro: String(err) });
+  }
+});
+
 // Handler de rota não encontrada
 app.use((_req, res) => {
   res.status(404).json({ error: 'Rota não encontrada' });
