@@ -13,6 +13,9 @@ const DOCTOR_PHONE = process.env.DOCTOR_PHONE || '92779950694580@lid';
 const INSTANCE_NAME = process.env.REPORT_INSTANCE || 'cto-geral';
 const EVOLUTION_URL = process.env.EVOLUTION_API_URL || 'http://cto-evolution:8080';
 const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY || '';
+// Chief of Staff — brief diário pessoal do Dr. Valth (additivo; só age se o token existir)
+const COS_BRIEF_URL = process.env.COS_BRIEF_URL || 'https://chief-of-staff-2huj.onrender.com/api/brief';
+const COS_BRIEF_TOKEN = process.env.COS_BRIEF_TOKEN || '';
 
 /**
  * Envia mensagem via Evolution API
@@ -119,6 +122,34 @@ export async function sendMonthlyReport(): Promise<void> {
 }
 
 /**
+ * Envia o BRIEF DIÁRIO do Chief of Staff (sistema pessoal do Dr. Valth)
+ * Busca o texto pronto no app chief-of-staff e envia pelo mesmo canal dos relatórios.
+ * Additivo: se COS_BRIEF_TOKEN não estiver configurado, não faz nada.
+ */
+export async function sendChiefOfStaffBrief(): Promise<void> {
+  try {
+    if (!COS_BRIEF_TOKEN) {
+      logger.info('[brief] COS_BRIEF_TOKEN ausente — brief Chief of Staff desativado');
+      return;
+    }
+    const r = await fetch(COS_BRIEF_URL, { headers: { 'X-Brief-Token': COS_BRIEF_TOKEN } });
+    if (!r.ok) {
+      logger.error(`[brief] Falha ao buscar brief (HTTP ${r.status})`);
+      return;
+    }
+    const data = (await r.json()) as { mensagem?: string };
+    if (!data.mensagem) {
+      logger.error('[brief] Resposta sem campo "mensagem"');
+      return;
+    }
+    await sendWhatsAppMessage(data.mensagem);
+    logger.info('[brief] Brief Chief of Staff enviado');
+  } catch (err) {
+    logger.error(`[brief] Erro ao enviar brief Chief of Staff: ${String(err)}`);
+  }
+}
+
+/**
  * Inicializa os agendadores
  * - Verifica a cada minuto se é hora de enviar algum relatório
  */
@@ -130,6 +161,7 @@ export function initReportScheduler(): void {
   let lastDailySent = '';
   let lastWeeklySent = '';
   let lastMonthlySent = '';
+  let lastBriefSent = '';
 
   setInterval(async () => {
     const now = new Date();
@@ -160,6 +192,13 @@ export function initReportScheduler(): void {
       lastMonthlySent = thisMonth;
       logger.info('[reports] Hora do relatório mensal (dia 1 às 9h)');
       await sendMonthlyReport();
+    }
+
+    // BRIEF Chief of Staff: 06:30 todo dia (mesmo fuso dos relatórios acima)
+    if (hour === 6 && minute === 30 && lastBriefSent !== today) {
+      lastBriefSent = today;
+      logger.info('[brief] Hora do brief Chief of Staff (06:30)');
+      await sendChiefOfStaffBrief();
     }
   }, 60_000); // verifica a cada 1 minuto
 }
