@@ -12,7 +12,7 @@ import { logConversation } from '../db/sqlite.js';
 import { logger } from '../services/logger.js';
 import { RateLimitMap, WebhookResponse } from '../types.js';
 import { loadAgents } from '../agents/loader.js';
-import { getSystemPrompt } from '../prompts/system.js';
+import { getSystemPrompt, hasSystemPrompt } from '../prompts/system.js';
 import { buildHolidayContext } from '../services/holidays.js';
 import { buildScheduleContext } from '../services/schedule.js';
 import { CLINIC_TZ } from '../services/clock.js';
@@ -162,12 +162,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  // 5b. PRIORIDADE: Se instance é DDD específico (ddd-81-choice, ddd-82-palmares),
-  //                 USE o prompt de location em vez do agent genérico
+  // 5b. PRIORIDADE: se a instância tem prompt de localização mapeado
+  //     (cto-caruaru, cto-campina, cto-geral, ddd-81-choice…), usa ele.
+  //     Caso contrário, usa o prompt do agente especializado (PM coordinator).
   let agentPrompt: string;
-  if (instance && instance.startsWith('ddd-')) {
+  if (hasSystemPrompt(instance)) {
     agentPrompt = getSystemPrompt(instance);
-    logger.info(`[webhook] Usando prompt de localização DDD: ${instance}`);
+    logger.info(`[webhook] Usando prompt da instância: ${instance}`);
   } else {
     agentPrompt = agent.getSystemPrompt();
     logger.info(`[pm-coordinator] Usando agente: ${agent.name} (confiança: ${(detection.confidence * 100).toFixed(0)}%)`);
