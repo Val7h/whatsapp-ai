@@ -72,6 +72,16 @@ async function bootstrap(): Promise<void> {
     initReportScheduler();
   }
 
+  // Lembretes de consulta (booking/48h/véspera/dia) + resumo diário de
+  // formulários de pré-consulta preenchidos.
+  if (process.env.APPOINTMENTS_ENABLED !== 'false') {
+    const { initAppointmentReminderScheduler } = await import('./appointments/scheduler.js');
+    initAppointmentReminderScheduler();
+
+    const { initDailyFormsDigestScheduler } = await import('./reports/daily-forms-digest.js');
+    initDailyFormsDigestScheduler();
+  }
+
   app.listen(PORT, () => {
     logger.info(`[server] WhatsApp AI rodando na porta ${PORT}`);
     logger.info(`[server] Environment: ${process.env.NODE_ENV || 'development'}`);

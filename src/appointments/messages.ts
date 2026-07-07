@@ -80,3 +80,16 @@ export function buildEveMessage(appt: AppointmentRow): string {
 export function buildDayMessage(appt: AppointmentRow): string {
   return `Hoje é o dia da sua consulta: ${formatTime(appt.time)}, em ${appt.unit}. Te esperamos.`;
 }
+
+/**
+ * Mensagem PROATIVA e completa de confirmação de agendamento (estágio
+ * 'booking' enviado pelo scheduler — não pelo webhook, que já injeta
+ * `buildBookingSuffix` na própria resposta do chat).
+ */
+export function buildBookingStandaloneMessage(appt: AppointmentRow, formUrl: string): string {
+  const dia = weekdayNameOf(appt.date);
+  return (
+    `Sua consulta foi agendada para ${dia}, ${formatDateBR(appt.date)}, ` +
+    `${formatTime(appt.time)}, em ${appt.unit}. ${buildBookingSuffix(appt, formUrl)}`
+  );
+}
