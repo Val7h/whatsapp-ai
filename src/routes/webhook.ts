@@ -19,9 +19,20 @@ import { CLINIC_TZ } from '../services/clock.js';
 import { withLock } from '../services/lock.js';
 import { toWhatsApp } from '../services/whatsapp-format.js';
 import { extractDDD, maskPhone } from '../services/phone.js';
+import { appointmentStore } from '../appointments/store.js';
+import { detectBooking } from '../appointments/booking-detect.js';
+import { interpretConfirmationReply } from '../appointments/confirmation-detect.js';
+import { buildFormLink, buildBookingSuffix } from '../appointments/messages.js';
 
 // Janela (em dias) de feriados injetada no prompt — configurável via env.
 const HOLIDAY_WINDOW_DAYS = parseInt(process.env.HOLIDAY_WINDOW_DAYS ?? '21', 10);
+
+// URL pública do formulário de pré-consulta (mesmo default usado em pre-consulta/routes.ts)
+const FORM_BASE_URL = process.env.FORM_BASE_URL || 'http://localhost:3030';
+// Instância Evolution usada para enviar lembretes quando não sabemos a real
+// (ex.: quando o n8n não informou `instance` e tivemos que inferir por DDD
+// apenas para escolher o PROMPT — "ddd-81-choice" etc. não são instâncias reais).
+const REMINDER_INSTANCE_FALLBACK = process.env.REPORT_INSTANCE || 'cto-geral';
 
 // ── Carregar agentes em runtime
 const { pm, AGENTS } = loadAgents();
@@ -126,6 +137,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
   let { phone, name, message, instance } = parsed.data;
   const { messageId } = parsed.data;
+  // Nome REAL da instância Evolution, se o n8n informou (antes de qualquer
+  // inferência por DDD abaixo, que serve só para ESCOLHER o prompt).
+  const clientProvidedInstance = instance;
 
   // ── Inferir instance do DDD se não fornecido ────────────────────────────
   if (!instance) {
@@ -224,6 +238,23 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
       const history = await getHistory(phone);
 
+      // ── Confirmação de véspera (SIM/NÃO) ──────────────────────────────────
+      // Best-effort: nunca interrompe o fluxo normal do chat se algo falhar.
+      try {
+        const pending = appointmentStore.findActiveForPhone(phone);
+        if (pending && pending.sent_eve === 1 && pending.status === 'agendado') {
+          const verdict = interpretConfirmationReply(message);
+          if (verdict) {
+            appointmentStore.updateStatus(pending.id, verdict);
+            logger.info(
+              `[appointments] ${maskPhone(phone)} respondeu à véspera: ${verdict} (agendamento #${pending.id})`,
+            );
+          }
+        }
+      } catch (err) {
+        logger.warn(`[appointments] Falha ao processar confirmação de véspera: ${String(err)}`);
+      }
+
       // Chamar Claude com o prompt do agente especializado (já tem fallback interno)
       const { reply: rawReply, tokens_input, tokens_output } = await askClaude(
         history,
@@ -238,8 +269,38 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         logger.warn(`[pm-coordinator] Validação falhou para ${detection.type}: ${validation.issues.join(', ')}`);
       }
       const adjusted = validation.ok ? rawReply : pm.adjustResponse(rawReply, validation.issues);
+
+      // ── Detecção de agendamento confirmado (best-effort) ──────────────────
+      // Só tenta em mensagens de AGENDAMENTO; nunca quebra a resposta ao paciente.
+      let bookingSuffix = '';
+      if (detection.type === pm.PROBLEM_TYPES.AGENDAMENTO) {
+        try {
+          const detected = detectBooking(adjusted, message, now);
+          if (detected && !appointmentStore.findActiveForPhoneOnDate(phone, detected.date)) {
+            const evoInstance = clientProvidedInstance || REMINDER_INSTANCE_FALLBACK;
+            const appt = appointmentStore.create({
+              phone,
+              name,
+              instance: evoInstance,
+              unit: detected.unit,
+              date: detected.date,
+              time: detected.time,
+            });
+            const { url, token } = buildFormLink(appt, FORM_BASE_URL, Date.now());
+            appointmentStore.setFormToken(appt.id, token);
+            appointmentStore.markReminderSent(appt.id, 'booking');
+            bookingSuffix = buildBookingSuffix(appt, url);
+            logger.info(
+              `[appointments] Agendamento registrado #${appt.id} — ${detected.unit} em ${detected.date} (${maskPhone(phone)})`,
+            );
+          }
+        } catch (err) {
+          logger.warn(`[appointments] Falha ao detectar/registrar agendamento: ${String(err)}`);
+        }
+      }
+
       // Converte Markdown do Claude para o formato do WhatsApp (*negrito*, • listas)
-      const finalReply = toWhatsApp(adjusted);
+      const finalReply = toWhatsApp(bookingSuffix ? `${adjusted}\n\n${bookingSuffix}` : adjusted);
 
       // Salvar histórico + idempotência + log (dentro do lock)
       await appendToHistory(phone, message, finalReply);
