@@ -16,6 +16,11 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
+# Fuso horário da clínica (GMT-3). node:alpine usa UTC por padrão, o que
+# quebraria a lógica de horário de atendimento e feriados.
+ENV TZ=America/Recife
+RUN apk add --no-cache tzdata
+
 # Apenas dependências de produção
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
