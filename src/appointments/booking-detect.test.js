@@ -63,7 +63,7 @@ describe('detectBooking — resolução por dia da semana explícito', () => {
     );
     assert.ok(r);
     assert.strictEqual(r.date, '2026-06-17');
-    assert.strictEqual(r.time, '09:00');
+    assert.strictEqual(r.time, null); // IP é ordem de chegada — sem hora marcada
     assert.strictEqual(r.city, 'Caruaru');
   });
 });
@@ -97,7 +97,7 @@ describe('detectBooking — "hoje" e "amanhã"', () => {
     );
     assert.ok(r);
     assert.strictEqual(r.date, '2026-06-18');
-    assert.strictEqual(r.time, '08:00');
+    assert.strictEqual(r.time, null); // CTO é ordem de chegada — sem hora marcada
   });
 });
 
@@ -121,7 +121,7 @@ describe('detectBooking — feriado empurra para a próxima semana', () => {
     const r = detectBooking('Confirmado na IP.', 'ok', at('2026-06-19T10:00:00'));
     assert.ok(r);
     assert.strictEqual(r.date, '2026-07-01');
-    assert.strictEqual(r.time, '09:00');
+    assert.strictEqual(r.time, null); // IP é ordem de chegada — sem hora marcada
   });
 });
 

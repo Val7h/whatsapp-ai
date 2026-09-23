@@ -23,7 +23,13 @@ export interface DetectedBooking {
   unit: string; // "Clínica — Cidade"
   city: string;
   date: string; // 'YYYY-MM-DD'
-  time: string; // 'HH:MM'
+  // 'HH:MM' para unidades de AGENDAMENTO (horário reservado de fato) ou null
+  // para unidades de ORDEM DE CHEGADA — não existe hora marcada do paciente,
+  // só o horário de abertura do turno. Guardar o horário de abertura como se
+  // fosse "a hora da consulta" faz os lembretes mentirem pro paciente (ex.:
+  // "sua consulta é 09h" numa unidade onde ele pode chegar a qualquer hora
+  // dentro do turno, mas não tem hora marcada nenhuma).
+  time: string | null;
 }
 
 // ── Frases que indicam confirmação de agendamento ───────────────────────────
@@ -78,6 +84,7 @@ interface ClinicEntry {
   city: string;
   weekdays: number[];
   timeByWeekday: Record<number, string>;
+  typeByWeekday: Record<number, Slot['type']>;
   aliases: string[]; // formas curtas usadas na conversa, já normalizadas
 }
 
@@ -100,10 +107,12 @@ function buildClinicIndex(): ClinicEntry[] {
           city: slot.city,
           weekdays: [],
           timeByWeekday: {},
+          typeByWeekday: {},
           aliases: [normalize(slot.clinic), ...(CLINIC_ALIASES[slot.clinic] ?? []).map(normalize)],
         };
       entry.weekdays.push(weekday);
       entry.timeByWeekday[weekday] = slot.start;
+      entry.typeByWeekday[weekday] = slot.type;
       map.set(key, entry);
     }
   }
@@ -188,10 +197,18 @@ export function detectBooking(replyText: string, userMessageText: string, now: D
     guard++;
   }
 
+  const slotType = clinic.typeByWeekday[weekday] ?? clinic.typeByWeekday[clinic.weekdays[0]];
+  // Ordem de chegada: não existe hora marcada do paciente — não inventa uma
+  // a partir do horário de abertura do turno (ver comentário em DetectedBooking).
+  const time =
+    slotType === 'ordem de chegada'
+      ? null
+      : clinic.timeByWeekday[weekday] ?? clinic.timeByWeekday[clinic.weekdays[0]];
+
   return {
     unit: `${clinic.clinic} — ${clinic.city}`,
     city: clinic.city,
     date: dateISO,
-    time: clinic.timeByWeekday[weekday] ?? clinic.timeByWeekday[clinic.weekdays[0]],
+    time,
   };
 }
