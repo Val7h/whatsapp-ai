@@ -5,6 +5,9 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { validarToken } from './token';
 import { gerarPDF } from './gerar-pdf';
+import { submissionsStore } from './submissions.js';
+import { appointmentStore } from '../appointments/store.js';
+import { logger } from '../services/logger.js';
 
 const router = express.Router();
 
@@ -94,9 +97,9 @@ router.post('/submit-pre-consulta', express.json({ limit: '50kb' }), async (req:
     const pdfFilename = await gerarPDF(body, PDFS_DIR);
     const pdf_url = `${BASE_URL}/uploads/pdfs/${pdfFilename}`;
 
-    // notifica n8n
+    // notifica n8n (best-effort — Sheets/Drive/Calendar são responsabilidade dele)
     const payload = { ...body, pdf_url };
-    await fetch(N8N_WEBHOOK, {
+    fetch(N8N_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -104,6 +107,24 @@ router.post('/submit-pre-consulta', express.json({ limit: '50kb' }), async (req:
       // não bloqueia resposta ao paciente se n8n estiver fora
       console.error('[pre-consulta] erro ao notificar n8n:', err.message);
     });
+
+    // Registro LOCAL (independente do n8n) — garante que o médico seja
+    // avisado no resumo diário mesmo que a integração com Sheets/Drive falhe.
+    try {
+      submissionsStore.record({
+        agendamento_id: String(agendamento_id),
+        phone: String(body.telefone ?? ''),
+        name: String(body.nome ?? 'Paciente'),
+        pdf_url,
+      });
+
+      const appointmentId = Number(agendamento_id);
+      if (Number.isInteger(appointmentId) && appointmentStore.getById(appointmentId)) {
+        appointmentStore.markFormFilled(appointmentId);
+      }
+    } catch (err) {
+      logger.warn(`[pre-consulta] Falha ao registrar submissão localmente: ${String(err)}`);
+    }
 
     res.json({ ok: true, pdf_url });
   } catch (err) {

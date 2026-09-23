@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { initMemory } from './services/memory.js';
 import { logger } from './services/logger.js';
+import { checkAppointmentsConfig } from './services/config-check.js';
 import webhookRouter from './routes/webhook.js';
 import healthRouter from './routes/health.js';
 import adminRouter from './routes/admin.js';
@@ -70,6 +71,31 @@ async function bootstrap(): Promise<void> {
   if (process.env.REPORTS_ENABLED !== 'false') {
     const { initReportScheduler } = await import('./reports/scheduler.js');
     initReportScheduler();
+  }
+
+  // Lembretes de consulta (booking/48h/véspera/dia) + resumo diário de
+  // formulários de pré-consulta preenchidos.
+  if (process.env.APPOINTMENTS_ENABLED !== 'false') {
+    const { initAppointmentReminderScheduler } = await import('./appointments/scheduler.js');
+    initAppointmentReminderScheduler();
+
+    const { initDailyFormsDigestScheduler } = await import('./reports/daily-forms-digest.js');
+    initDailyFormsDigestScheduler();
+
+    // Autodiagnóstico: avisa no boot (bem visível) se alguma variável necessária
+    // para lembretes/formulário/resumo diário está faltando ou é só um fallback
+    // de desenvolvimento — em vez de descobrir isso só quando um envio falhar.
+    const configStatus = checkAppointmentsConfig();
+    if (configStatus.ok) {
+      logger.info('[startup] Configuração de agendamentos/lembretes: OK (tudo configurado)');
+    } else {
+      logger.warn('[startup] ⚠️  Configuração de agendamentos/lembretes com pendências:');
+      for (const [key, item] of Object.entries(configStatus.items)) {
+        if (!item.configured) {
+          logger.warn(`[startup]   - ${key}: ${item.warning}`);
+        }
+      }
+    }
   }
 
   app.listen(PORT, () => {

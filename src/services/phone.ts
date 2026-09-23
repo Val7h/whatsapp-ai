@@ -52,6 +52,16 @@ export function extractDDD(rawPhone: string): string {
 }
 
 /**
+ * Mascara o telefone para logs (LGPD) — mantém só os 4 últimos dígitos.
+ * Ex.: '5583999990001' → '*********0001'
+ */
+export function maskPhone(rawPhone: string): string {
+  const digits = normalizePhone(rawPhone);
+  if (digits.length <= 4) return '****';
+  return '*'.repeat(digits.length - 4) + digits.slice(-4);
+}
+
+/**
  * Verifica se é um paciente válido (qualquer formato de WhatsApp)
  */
 export function isValidPatient(rawPhone: string): boolean {

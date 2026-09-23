@@ -279,5 +279,14 @@ export function getSystemPrompt(instance?: string): string {
   return PROMPTS[instance] ?? PROMPT_GERAL;
 }
 
+/**
+ * Indica se `instance` tem um prompt de localização específico mapeado
+ * (ex.: cto-caruaru, cto-campina, cto-geral, ddd-81-choice…). Usado pelo
+ * webhook para decidir entre prompt de localização e prompt do agente.
+ */
+export function hasSystemPrompt(instance?: string): boolean {
+  return !!instance && Object.prototype.hasOwnProperty.call(PROMPTS, instance);
+}
+
 // Retrocompatibilidade para imports diretos de SYSTEM_PROMPT
 export const SYSTEM_PROMPT = PROMPT_GERAL;

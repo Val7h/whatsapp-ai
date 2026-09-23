@@ -16,7 +16,7 @@ services:
       - key: WEBHOOK_SECRET
         sync: false
       - key: CLAUDE_MODEL
-        value: claude-sonnet-4-20250514
+        value: claude-sonnet-4-6
       - key: MAX_HISTORY_TURNS
         value: "20"
       - key: CLINIC_PHONE
@@ -24,6 +24,26 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
+        sync: false
+      # ── Lembretes de consulta + resumo diário de formulários ──────────
+      - key: EVOLUTION_API_URL
+        sync: false
+      - key: EVOLUTION_API_KEY
+        sync: false
+      - key: DOCTOR_PHONE
+        sync: false
+      - key: REPORT_INSTANCE
+        value: cto-geral
+      - key: APPOINTMENTS_ENABLED
+        value: "true"
+      - key: FORMS_DIGEST_HOUR
+        value: "19"
+      # ── Formulário de pré-consulta ─────────────────────────────────────
+      - key: FORM_SECRET
+        sync: false
+      - key: FORM_BASE_URL
+        sync: false
+      - key: N8N_WEBHOOK_PRE_CONSULTA
         sync: false
 
   # PostgreSQL Database

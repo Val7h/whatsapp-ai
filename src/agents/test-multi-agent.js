@@ -52,7 +52,9 @@ describe('PM Coordinator', () => {
             const msgs = [
                 'operei há 3 dias e tenho inchaço',
                 'após a cirurgia estou com febre',
-                'pós-operatório com dor intensa',
+                // "dor intensa" pós-op escala para URGÊNCIA (comportamento seguro);
+                // aqui validamos um caso de pós-op sem sinal de emergência.
+                'pós-operatório, quando posso molhar os pontos?',
             ];
             msgs.forEach(msg => {
                 const result = pm.detectProblemType(msg);
@@ -261,8 +263,8 @@ describe('Agentes Especializados', () => {
     describe('FAQ', () => {
         it('deve ter getSystemPrompt() com informações fixas', () => {
             const prompt = FAQ.getSystemPrompt();
-            assert(prompt.includes('endereço') || prompt.includes('horário'));
-            assert(prompt.includes('telefone') || prompt.includes('contato'));
+            assert(/endereço|horário/i.test(prompt));
+            assert(/telefone|contato/i.test(prompt)); // case-insensitive: prompt usa "TELEFONES"
         });
 
         it('deve ter name e description', () => {
@@ -287,8 +289,8 @@ describe('Agentes Especializados', () => {
     describe('RETORNO', () => {
         it('deve ter getSystemPrompt() com avaliação de evolução', () => {
             const prompt = RETORNO.getSystemPrompt();
-            assert(prompt.includes('retorno') || prompt.includes('evolução'));
-            assert(prompt.includes('melhorou') || prompt.includes('piora'));
+            assert(/retorno|evolução/i.test(prompt));
+            assert(/melhorou|piora/i.test(prompt)); // case-insensitive: prompt usa "Melhorou"/"Piora"
         });
 
         it('deve ter name e description', () => {
