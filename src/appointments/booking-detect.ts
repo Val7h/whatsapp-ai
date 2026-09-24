@@ -18,6 +18,7 @@
 import { SCHEDULE, Slot } from '../services/schedule.js';
 import { wallClock, addDaysISO, weekdayOfISO, CLINIC_TZ } from '../services/clock.js';
 import { isHolidayOn } from '../services/holidays.js';
+import { isClosureOn } from '../services/closures.js';
 
 export interface DetectedBooking {
   unit: string; // "Clínica — Cidade"
@@ -189,10 +190,12 @@ export function detectBooking(replyText: string, userMessageText: string, now: D
     dateISO = nearestDateForWeekday(today, sorted[0]);
   }
 
-  // Pula feriados da cidade (avança para a próxima ocorrência do mesmo weekday)
+  // Pula feriados e fechamentos avulsos da unidade (avança para a próxima
+  // ocorrência do mesmo weekday) — nunca confirma consulta num dia em que a
+  // clínica está fechada, mesmo que a grade semanal diga que "é dia dela".
   let guard = 0;
   const weekday = weekdayOfISO(dateISO);
-  while (isHolidayOn(dateISO, clinic.city) && guard < 8) {
+  while ((isHolidayOn(dateISO, clinic.city) || isClosureOn(dateISO, clinic.city, clinic.clinic)) && guard < 8) {
     dateISO = addDaysISO(dateISO, 7);
     guard++;
   }

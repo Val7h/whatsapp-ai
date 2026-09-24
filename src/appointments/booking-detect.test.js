@@ -125,6 +125,16 @@ describe('detectBooking — feriado empurra para a próxima semana', () => {
   });
 });
 
+describe('detectBooking — fechamento avulso (não-feriado) empurra para a próxima semana', () => {
+  it('CTO fechado em 24/09/2026 (perícias em Sousa) → avança pra próxima quinta', () => {
+    // quinta 24/09 é fechamento avulso cadastrado em closures.ts (não é feriado)
+    const r = detectBooking('Confirmado no CTO hoje.', 'hoje mesmo', at('2026-09-24T07:00:00'));
+    assert.ok(r);
+    assert.strictEqual(r.date, '2026-10-01'); // próxima quinta sem fechamento
+    assert.strictEqual(r.time, null); // CTO é ordem de chegada
+  });
+});
+
 describe('detectBooking — apelidos e limites de palavra', () => {
   it('"IP" isolado é reconhecido como a clínica', () => {
     const r = detectBooking('Confirmado, IP quarta-feira.', 'ok', at('2026-06-15T10:00:00'));
