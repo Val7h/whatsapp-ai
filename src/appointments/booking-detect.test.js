@@ -126,11 +126,12 @@ describe('detectBooking — feriado empurra para a próxima semana', () => {
 });
 
 describe('detectBooking — fechamento avulso (não-feriado) empurra para a próxima semana', () => {
-  it('CTO fechado em 24/09/2026 (perícias em Sousa) → avança pra próxima quinta', () => {
-    // quinta 24/09 é fechamento avulso cadastrado em closures.ts (não é feriado)
+  it('CTO fechado em 24/09/2026 (perícias em Sousa) → avança pra próxima quinta sem fechamento', () => {
+    // 24/09 e 01/10 são fechamentos avulsos cadastrados em closures.ts (não são feriado) —
+    // o loop deve pular AMBOS até achar uma quinta realmente aberta (08/10).
     const r = detectBooking('Confirmado no CTO hoje.', 'hoje mesmo', at('2026-09-24T07:00:00'));
     assert.ok(r);
-    assert.strictEqual(r.date, '2026-10-01'); // próxima quinta sem fechamento
+    assert.strictEqual(r.date, '2026-10-08');
     assert.strictEqual(r.time, null); // CTO é ordem de chegada
   });
 });
