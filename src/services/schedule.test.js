@@ -43,6 +43,11 @@ describe('Horário de atendimento', () => {
     it('quinta 24/09/2026 fica SEM atendimento — fechamento avulso (perícias em Sousa, não é feriado)', () => {
       assert.strictEqual(S.slotsForDay(at('2026-09-24T10:00:00')).length, 0);
     });
+
+    it('quintas 01/10 e 22/10/2026 ficam SEM atendimento — rodadas de Sousa de outubro', () => {
+      assert.strictEqual(S.slotsForDay(at('2026-10-01T10:00:00')).length, 0);
+      assert.strictEqual(S.slotsForDay(at('2026-10-22T10:00:00')).length, 0);
+    });
   });
 
   describe('openSlotsAt() / isOpenNow()', () => {

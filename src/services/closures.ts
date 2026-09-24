@@ -32,6 +32,33 @@ export const CLOSURES: Closure[] = [
     clinic: 'Clínica Artro',
     reason: 'Dr. Valth em perícias federais (Sousa)',
   },
+  // Rodadas de outubro/2026 em Sousa (confirmado por Dr. Valth em 24/09).
+  // 02/10 e 23/10 caem numa sexta-feira — CTO/Artro já não atendem sexta,
+  // então não precisam de entrada aqui.
+  {
+    date: '2026-10-01',
+    city: 'Campina Grande',
+    clinic: 'CTO',
+    reason: 'Dr. Valth em perícias federais (Sousa)',
+  },
+  {
+    date: '2026-10-01',
+    city: 'Campina Grande',
+    clinic: 'Clínica Artro',
+    reason: 'Dr. Valth em perícias federais (Sousa)',
+  },
+  {
+    date: '2026-10-22',
+    city: 'Campina Grande',
+    clinic: 'CTO',
+    reason: 'Dr. Valth em perícias federais (Sousa)',
+  },
+  {
+    date: '2026-10-22',
+    city: 'Campina Grande',
+    clinic: 'Clínica Artro',
+    reason: 'Dr. Valth em perícias federais (Sousa)',
+  },
 ];
 
 /** A unidade (ou, sem `clinic`, a cidade inteira) está fechada nessa data por motivo avulso? */
