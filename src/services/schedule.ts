@@ -16,6 +16,7 @@
  */
 
 import { isHolidayOn } from './holidays.js';
+import { isClosureOn } from './closures.js';
 import { wallClock, weekdayOfISO, addDaysISO, weekdayName } from './clock.js';
 
 export type SlotType = 'ordem de chegada' | 'agendado';
@@ -54,9 +55,11 @@ const toMin = (hhmm: string): number => {
 };
 const fmt = (hhmm: string): string => hhmm.replace(':', 'h').replace('h00', 'h');
 
-/** Slots de um dia (por ISO + weekday), removendo unidades fechadas por feriado. */
+/** Slots de um dia (por ISO + weekday), removendo unidades fechadas por feriado ou fechamento avulso. */
 function slotsForISO(iso: string, weekday: number): Slot[] {
-  return (SCHEDULE[weekday] ?? []).filter((s) => !isHolidayOn(iso, s.city));
+  return (SCHEDULE[weekday] ?? []).filter(
+    (s) => !isHolidayOn(iso, s.city) && !isClosureOn(iso, s.city, s.clinic),
+  );
 }
 
 /**

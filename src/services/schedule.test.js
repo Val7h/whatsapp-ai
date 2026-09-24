@@ -39,6 +39,10 @@ describe('Horário de atendimento', () => {
     it('quarta de São João (24/06) fica SEM atendimento (feriado)', () => {
       assert.strictEqual(S.slotsForDay(at('2026-06-24T10:00:00')).length, 0);
     });
+
+    it('quinta 24/09/2026 fica SEM atendimento — fechamento avulso (perícias em Sousa, não é feriado)', () => {
+      assert.strictEqual(S.slotsForDay(at('2026-09-24T10:00:00')).length, 0);
+    });
   });
 
   describe('openSlotsAt() / isOpenNow()', () => {
@@ -68,6 +72,10 @@ describe('Horário de atendimento', () => {
 
     it('sexta a qualquer hora → fechado', () => {
       assert.strictEqual(S.isOpenNow(at('2026-06-26T10:00:00')), false);
+    });
+
+    it('quinta 24/09/2026 09:00 (horário normal do CTO) → fechado por perícia', () => {
+      assert.strictEqual(S.isOpenNow(at('2026-09-24T09:00:00')), false);
     });
   });
 
